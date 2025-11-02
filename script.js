@@ -13,10 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameModeSelect = document.getElementById('game-mode');
     const boardRowsInput = document.getElementById('board-rows');
     const boardColsInput = document.getElementById('board-cols');
+    const lineLengthInput = document.getElementById('line-length');
 
     // 遊戲設定 (與前一版相同)
     let gridRows = 4;
     let gridCols = 4;
+    let maxLineLength = 1; // 最大連線長度
     const DOT_SPACING = 100;
     const PADDING = 50;
     const DOT_RADIUS = 6;
@@ -58,6 +60,15 @@ document.addEventListener('DOMContentLoaded', () => {
         gridCols = Math.max(2, Math.min(12, isNaN(desiredCols) ? 4 : desiredCols));
         if (boardRowsInput && boardRowsInput.value != String(gridRows)) boardRowsInput.value = String(gridRows);
         if (boardColsInput && boardColsInput.value != String(gridCols)) boardColsInput.value = String(gridCols);
+        
+        // 讀取並限制連線長度
+        const desiredLength = parseInt(lineLengthInput && lineLengthInput.value ? lineLengthInput.value : '1', 10);
+        const maxAllowedLength = Math.max(gridRows - 1, gridCols - 1); // 根據棋盤大小限制最大長度
+        maxLineLength = Math.max(1, Math.min(maxAllowedLength, isNaN(desiredLength) ? 1 : desiredLength));
+        if (lineLengthInput && lineLengthInput.value != String(maxLineLength)) {
+            lineLengthInput.value = String(maxLineLength);
+            lineLengthInput.max = maxAllowedLength; // 動態更新最大允許值
+        }
 
         const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
         const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
@@ -346,8 +357,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (clickedDot === selectedDot1) {
                 selectedDot1 = null;
             } else {
-                selectedDot2 = clickedDot;
-                actionBar.classList.remove('hidden');
+                // 立即檢查連線長度是否符合規定
+                const dr = Math.abs(selectedDot1.r - clickedDot.r);
+                const dc = Math.abs(selectedDot1.c - clickedDot.c);
+                const lineLength = Math.max(dr, dc);
+                
+                // 檢查是否為有效連線（橫線或直線）且長度必須剛好等於設定值
+                if (!isValidLine(selectedDot1, clickedDot)) {
+                    if (dr !== 0 && dc !== 0) {
+                        alert("無效的線條 (只能畫橫線或直線)");
+                    } else if (lineLength !== maxLineLength) {
+                        alert(`連線長度必須剛好等於 ${maxLineLength} (目前選擇的長度為 ${lineLength})`);
+                    }
+                    selectedDot1 = null; // 取消選擇
+                } else {
+                    selectedDot2 = clickedDot;
+                    actionBar.classList.remove('hidden');
+                }
             }
         }
         drawCanvas(); // 呼叫包裝函式
@@ -359,8 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const dotA = selectedDot1;
         const dotB = selectedDot2;
 
+        // 最終驗證：連線長度必須剛好等於設定值
         if (!isValidLine(dotA, dotB)) {
-            alert("無效的線條 (只能畫橫線或直線)");
+            const dr = Math.abs(dotA.r - dotB.r);
+            const dc = Math.abs(dotA.c - dotB.c);
+            const lineLength = Math.max(dr, dc);
+            if (dr !== 0 && dc !== 0) {
+                alert("無效的線條 (只能畫橫線或直線)");
+            } else if (lineLength !== maxLineLength) {
+                alert(`連線長度必須剛好等於 ${maxLineLength} (目前選擇的長度為 ${lineLength})`);
+            }
             cancelLine();
             return;
         }
@@ -372,14 +406,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // 檢查是否至少有一個未畫過的虛線格（這是必要條件）
+        // 規則：可以重疊已畫過的線段，但必須包含至少一個新的虛線格
         const newSegments = segments.filter(seg => seg.players.length === 0);
         
         if (newSegments.length === 0) {
             const alreadyDrawnBySelf = segments.every(seg => seg.players.includes(currentPlayer));
             if (alreadyDrawnBySelf) {
-                    alert("這條線您已經畫過了。");
+                alert("這條線您已經完全畫過了，必須包含至少一個未畫過的虛線格。");
             } else {
-                    alert("這條線必須包含至少一段*全新*的線段。");
+                alert("這條線必須包含至少一個未畫過的虛線格才能繪製（可以重疊已畫過的線段）。");
             }
             cancelLine();
             return;
@@ -454,10 +490,26 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
+    // 驗證連線是否有效且符合長度限制（玩家和 AI 都必須遵守）
+    // 規則：連線長度必須剛好等於設定值（不能小於或大於）
     function isValidLine(dotA, dotB) {
+        if (!dotA || !dotB) return false;
+        
         const dr = Math.abs(dotA.r - dotB.r);
         const dc = Math.abs(dotA.c - dotB.c);
-        return dr === 0 || dc === 0;
+        
+        // 檢查是否為橫線或直線
+        if (!(dr === 0 || dc === 0)) {
+            return false;
+        }
+        
+        // 嚴格檢查：連線長度必須剛好等於設定值（不能小於或大於）
+        const lineLength = Math.max(dr, dc);
+        if (lineLength !== maxLineLength) {
+            return false; // 長度必須剛好等於 maxLineLength
+        }
+        
+        return true;
     }
 
     function getSegmentsForLine(dotA, dotB) {
@@ -553,6 +605,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function aiMove() {
+        // 如果連線長度限制大於 1，只能使用長連線模式（因為單線段長度是1，不等於maxLineLength）
+        if (maxLineLength > 1) {
+            const longLineMove = findBestLongLineMove();
+            if (longLineMove) {
+                executeAIMove(longLineMove.dotA, longLineMove.dotB);
+                return;
+            } else {
+                // 找不到符合長度的連線，AI 無法行動，切換回玩家
+                if (!isGameOver()) switchPlayer();
+                return;
+            }
+        }
+        
+        // 當 maxLineLength = 1 時，使用優化後的單個線段模式
         let availableSegments = [];
         for (const id in lines) {
             if (lines[id].players.length === 0) {
@@ -572,6 +638,8 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const segment of availableSegments) {
             let squaresCompleted = 0;
             let isUnsafe = false;
+            let riskScore = 0; // 風險分數
+            let potentialSquares = 0; // 潛在方塊機會
 
             squares.forEach(sq => {
                 if (sq.filled || !sq.lineKeys.includes(segment.id)) {
@@ -585,30 +653,62 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
+                // 關鍵規則：最後圍成正方形的人得分！
                 if (sidesDrawn === 3) {
+                    // 已有三邊，AI 畫第四邊 → AI 得分！
                     squaresCompleted++;
                 } else if (sidesDrawn === 2) {
+                    // 已有兩邊，AI 畫第三邊 → 給對手創造完成機會，高風險！
                     isUnsafe = true;
+                    riskScore += 10; // 高風險：對手下一步可以得分
+                } else if (sidesDrawn === 1) {
+                    // 已有一邊，AI 畫第二邊，風險較低
+                    riskScore += 2;
+                    isUnsafe = true;
+                } else {
+                    // 零邊，幾乎沒有風險
+                    potentialSquares += 0.3;
                 }
             });
 
+            // 儲存更多評估資訊
+            const moveInfo = {
+                segment,
+                squaresCompleted,
+                isUnsafe,
+                riskScore,
+                potentialSquares
+            };
+
             if (squaresCompleted > 0) {
-                winningMoves.push(segment);
+                winningMoves.push(moveInfo);
             } else if (isUnsafe) {
-                unsafeMoves.push(segment);
+                unsafeMoves.push(moveInfo);
             } else {
-                safeMoves.push(segment);
+                safeMoves.push(moveInfo);
             }
         }
         
         let segmentToDraw;
         if (winningMoves.length > 0) {
-            segmentToDraw = winningMoves[Math.floor(Math.random() * winningMoves.length)];
+            // 優化：選擇完成最多方塊且風險最低的
+            winningMoves.sort((a, b) => {
+                if (b.squaresCompleted !== a.squaresCompleted) {
+                    return b.squaresCompleted - a.squaresCompleted;
+                }
+                return a.riskScore - b.riskScore;
+            });
+            segmentToDraw = winningMoves[0].segment;
         } else if (safeMoves.length > 0) {
-            segmentToDraw = safeMoves[Math.floor(Math.random() * safeMoves.length)];
+            // 優化：選擇能創造最多潛在機會的
+            safeMoves.sort((a, b) => b.potentialSquares - a.potentialSquares);
+            segmentToDraw = safeMoves[0].segment;
         } else if (unsafeMoves.length > 0) {
-            segmentToDraw = unsafeMoves[Math.floor(Math.random() * unsafeMoves.length)];
+            // 優化：選擇風險最小的
+            unsafeMoves.sort((a, b) => a.riskScore - b.riskScore);
+            segmentToDraw = unsafeMoves[0].segment;
         } else {
+            // 如果以上都沒有，隨機選擇
             segmentToDraw = availableSegments[Math.floor(Math.random() * availableSegments.length)];
         }
 
@@ -617,9 +717,255 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
         }
         
-        if (!segmentToDraw.players.includes(currentPlayer)) {
-            segmentToDraw.players.push(currentPlayer);
+        // 將單個線段轉換為點對
+        const dotA = segmentToDraw.p1;
+        const dotB = segmentToDraw.p2;
+        executeAIMove(dotA, dotB);
+    }
+    
+    // 尋找最佳長連線移動（優化版：減少不必要的循環）
+    function findBestLongLineMove() {
+        let winningMoves = [];
+        let safeMoves = [];
+        let unsafeMoves = [];
+        
+        // 優化：只檢查符合長度限制的點對，而不是所有組合
+        // 對於橫線：檢查同一行，列間距為 maxLineLength
+        // 對於直線：檢查同一列，行間距為 maxLineLength
+        for (let r = 0; r < gridRows; r++) {
+            for (let c = 0; c < gridCols; c++) {
+                const dotA = dots[r][c];
+                
+                // 檢查橫線（向右）
+                if (c + maxLineLength < gridCols) {
+                    const dotB = dots[r][c + maxLineLength];
+                    evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves);
+                }
+                
+                // 檢查直線（向下）
+                if (r + maxLineLength < gridRows) {
+                    const dotB = dots[r + maxLineLength][c];
+                    evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves);
+                }
+            }
         }
+        
+        // 優化後的優先選擇策略（針對「最後圍成的人得分」規則）
+        if (winningMoves.length > 0) {
+            // 優先完成方塊（搶先完成已有三邊的方塊）
+            winningMoves.sort((a, b) => {
+                // 首先比較完成的方塊數
+                if (b.squaresCompleted !== a.squaresCompleted) {
+                    return b.squaresCompleted - a.squaresCompleted;
+                }
+                // 如果方塊數相同，優先選擇防禦價值高的（搶先完成已有三邊的）
+                if (b.defensiveValue !== a.defensiveValue) {
+                    return b.defensiveValue - a.defensiveValue;
+                }
+                // 比較綜合評分
+                if (b.totalScore !== a.totalScore) {
+                    return b.totalScore - a.totalScore;
+                }
+                // 優先選擇風險較低的
+                if (a.riskScore !== b.riskScore) {
+                    return a.riskScore - b.riskScore;
+                }
+                // 優先選擇能畫更多新線段的
+                return b.totalNewSegments - a.totalNewSegments;
+            });
+            return winningMoves[0];
+        } else if (safeMoves.length > 0) {
+            // 安全移動：優先考慮防禦價值（搶先完成已有三邊的方塊）
+            safeMoves.sort((a, b) => {
+                // 最高優先級：搶先完成已有三邊的方塊
+                if (b.defensiveValue !== a.defensiveValue) {
+                    return b.defensiveValue - a.defensiveValue;
+                }
+                // 比較綜合評分
+                if (b.totalScore !== a.totalScore) {
+                    return b.totalScore - a.totalScore;
+                }
+                // 優先選擇風險較低的
+                if (a.riskScore !== b.riskScore) {
+                    return a.riskScore - b.riskScore;
+                }
+                // 優先選擇能創造更多潛在方塊機會的
+                if (b.potentialSquares !== a.potentialSquares) {
+                    return b.potentialSquares - a.potentialSquares;
+                }
+                // 優先選擇能畫更多新線段的
+                if (b.totalNewSegments !== a.totalNewSegments) {
+                    return b.totalNewSegments - a.totalNewSegments;
+                }
+                // 優先選擇控制更多區域的
+                return b.controlArea - a.controlArea;
+            });
+            return safeMoves[0];
+        } else if (unsafeMoves.length > 0) {
+            // 不安全移動：選擇綜合風險最低的（盡量避免給對手創造機會）
+            unsafeMoves.sort((a, b) => {
+                // 優先選擇綜合評分最高的（風險低、潛力高）
+                if (b.totalScore !== a.totalScore) {
+                    return b.totalScore - a.totalScore;
+                }
+                // 比較總風險分數（優先避免給對手創造完成機會）
+                if (a.riskScore !== b.riskScore) {
+                    return a.riskScore - b.riskScore;
+                }
+                // 優先選擇連鎖風險低的
+                if (a.chainRisk !== b.chainRisk) {
+                    return a.chainRisk - b.chainRisk;
+                }
+                // 優先選擇有防禦價值的（如果能搶先完成）
+                if (b.defensiveValue !== a.defensiveValue) {
+                    return b.defensiveValue - a.defensiveValue;
+                }
+                // 最後選擇能創造更多潛力的
+                return b.potentialSquares - a.potentialSquares;
+            });
+            return unsafeMoves[0];
+        }
+        
+        return null;
+    }
+    
+    // 評估單個移動的價值（優化版：針對長連線的特殊邏輯）
+    function evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves) {
+        // 檢查是否為有效連線且長度必須剛好等於設定值
+        if (!isValidLine(dotA, dotB)) return;
+        
+        // 檢查是否至少有一個未畫過的虛線格
+        const segments = getSegmentsForLine(dotA, dotB);
+        if (segments.length === 0) return;
+        const newSegments = segments.filter(seg => seg.players.length === 0);
+        if (newSegments.length === 0) return; // 必須至少有一個虛線格
+        
+        // 評估這個連線的價值
+        let squaresCompleted = 0;
+        let isUnsafe = false;
+        let totalNewSegments = newSegments.length;
+        let potentialSquares = 0; // 能創造的潛在方塊機會
+        let riskScore = 0; // 風險分數（給對手創造的機會）
+        let chainRisk = 0; // 連鎖風險（可能引發的多個連續威脅）
+        let defensiveValue = 0; // 防禦價值（阻止對手完成方塊）
+        let controlArea = 0; // 控制區域（影響的方塊數量）
+        
+        // 統計這個移動會影響的所有方塊
+        const affectedSquares = new Set();
+        segments.forEach(seg => {
+            squares.forEach(sq => {
+                if (!sq.filled && sq.lineKeys.includes(seg.id)) {
+                    affectedSquares.add(sq);
+                }
+            });
+        });
+        
+        affectedSquares.forEach(sq => {
+            let sidesBeforeMove = 0; // 移動前已畫的邊數
+            let sidesAfterMove = 0; // 移動後總邊數
+            let newSegmentsInSquare = 0; // 這個方塊中有多少新線段
+            
+            // 計算移動前的狀態和移動後的狀態
+            sq.lineKeys.forEach(key => {
+                const line = lines[key];
+                if (line.players.length > 0) {
+                    // 這個邊已經被畫了
+                    sidesBeforeMove++;
+                    sidesAfterMove++;
+                } else if (segments.some(seg => seg.id === key)) {
+                    // 這個移動會畫這個邊
+                    sidesAfterMove++;
+                    if (newSegments.some(seg => seg.id === key)) {
+                        // 這是新的線段（之前未畫過）
+                        newSegmentsInSquare++;
+                    }
+                }
+            });
+            
+            controlArea++;
+            
+            // 關鍵規則：最後圍成正方形的人得分！
+            // 如果移動前已有三邊，AI 畫新的第四邊就能得分
+            
+            if (sidesBeforeMove === 3 && newSegmentsInSquare > 0) {
+                // 移動前已有三邊，AI 畫了新的第四邊 → AI 得分！
+                squaresCompleted++;
+                defensiveValue += 30; // 搶先完成的價值極高
+            } else if (sidesBeforeMove === 2 && newSegmentsInSquare > 0 && sidesAfterMove === 3) {
+                // 移動前兩邊，移動後三邊（AI 畫了第三邊）
+                // 這給對手創造了完成方塊的機會，風險極高！
+                riskScore += 20; // 極高風險：對手下一步可以得分
+                isUnsafe = true;
+                chainRisk += 5;
+            } else if (sidesBeforeMove === 1 && newSegmentsInSquare > 0 && sidesAfterMove === 2) {
+                // 移動前一邊，移動後兩邊（AI 畫了第二邊）
+                // 風險較低，但還是給對手創造了潛在機會
+                riskScore += 3;
+                isUnsafe = true;
+            } else if (sidesBeforeMove === 0 && newSegmentsInSquare > 0 && sidesAfterMove === 1) {
+                // 移動前零邊，移動後一邊（AI 畫了第一邊）
+                // 幾乎沒有風險
+                potentialSquares += 0.2;
+            }
+            // 注意：如果 newSegmentsInSquare === 0，說明只是重疊已畫的線，不會改變狀態
+        });
+        
+        // 計算綜合評分
+        const move = { 
+            dotA, 
+            dotB, 
+            squaresCompleted, 
+            isUnsafe, 
+            totalNewSegments,
+            potentialSquares,
+            riskScore: riskScore + chainRisk, // 總風險包含連鎖風險
+            chainRisk,
+            defensiveValue,
+            controlArea,
+            // 綜合評分（用於排序）
+            // 優先完成方塊，避免給對手創造機會，優先搶先完成已有三邊的方塊
+            totalScore: squaresCompleted * 50 + defensiveValue - (riskScore + chainRisk * 2) + potentialSquares * 0.5
+        };
+        
+        if (squaresCompleted > 0) {
+            winningMoves.push(move);
+        } else if (isUnsafe) {
+            unsafeMoves.push(move);
+        } else {
+            safeMoves.push(move);
+        }
+    }
+    
+    // 執行 AI 移動（與玩家移動邏輯相同）
+    function executeAIMove(dotA, dotB) {
+        // 嚴格檢查：必須符合連線長度限制
+        if (!isValidLine(dotA, dotB)) {
+            console.warn("AI 嘗試繪製無效連線，已阻止");
+            if (!isGameOver()) switchPlayer();
+            return;
+        }
+        
+        const segments = getSegmentsForLine(dotA, dotB);
+        if (segments.length === 0) {
+            // 如果無法執行，切換玩家
+            if (!isGameOver()) switchPlayer();
+            return;
+        }
+
+        // 嚴格檢查：必須至少有一個未畫過的虛線格才能執行移動
+        const newSegments = segments.filter(seg => seg.players.length === 0);
+        
+        if (newSegments.length === 0) {
+            // 如果沒有新的虛線格，AI 無法執行此移動，切換回玩家
+            if (!isGameOver()) switchPlayer();
+            return;
+        }
+
+        segments.forEach(seg => {
+            if (!seg.players.includes(currentPlayer)) {
+                seg.players.push(currentPlayer);
+            }
+        });
         
         let scoredThisTurn = false;
         let totalFilledSquares = 0;
@@ -646,15 +992,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 無論 AI 是否得分，都切換回玩家 (與前一版相同)
+        // 無論 AI 是否得分，都切換回玩家
         switchPlayer();
         
-        // --- 【修改】 ---
         // 只有在動畫未播放時才恢復指針
         if (!isAnimating) {
             canvas.style.pointerEvents = 'auto';
         }
-        // --- 【修改結束】 ---
     }
 
     // --- 結束 AI 相關函式 ---
@@ -677,6 +1021,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (boardColsInput) {
         boardColsInput.addEventListener('change', initGame);
         boardColsInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') initGame(); });
+    }
+    if (lineLengthInput) {
+        lineLengthInput.addEventListener('change', initGame);
+        lineLengthInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') initGame(); });
     }
 
     // 啟動遊戲

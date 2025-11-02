@@ -1,27 +1,38 @@
 /* --- CSS 變數：方便管理顏色和常用值 --- */
 :root {
     --font-main: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --color-bg: #f7f9fc; /* 淺藍灰背景 */
-    --color-text: #34495e; /* 深藍灰色文本 */
-    --color-border: #e0e0e0; /* 淺灰色邊框 */
+    --color-bg: #f0f4f8; /* 淺藍灰背景 */
+    --color-text: #2d3748; /* 深藍灰色文本 */
+    --color-text-light: #718096; /* 淺灰色文本 */
+    --color-border: #e2e8f0; /* 淺灰色邊框 */
     --color-white: #ffffff;
     
     /* 玩家顏色 */
-    --p1-color: #3498db; /* 藍色 */
-    --p1-bg: #ecf5fb; /* 淺藍背景 */
-    --p2-color: #e74c3c; /* 紅色 */
-    --p2-bg: #fdf5f4; /* 淺紅背景 */
+    --p1-color: #4299e1; /* 藍色 */
+    --p1-bg: #ebf8ff; /* 淺藍背景 */
+    --p1-bg-hover: #bee3f8;
+    --p2-color: #f56565; /* 紅色 */
+    --p2-bg: #fff5f5; /* 淺紅背景 */
+    --p2-bg-hover: #fed7d7;
 
     /* 按鈕顏色 */
-    --btn-primary: #3498db;
-    --btn-success: #2ecc71;
-    --btn-danger: #e74c3c;
-    --btn-secondary: #7f8c8d; /* 【新增】 次要按鈕顏色 */
+    --btn-primary: #4299e1;
+    --btn-primary-hover: #3182ce;
+    --btn-success: #48bb78;
+    --btn-success-hover: #38a169;
+    --btn-danger: #f56565;
+    --btn-danger-hover: #e53e3e;
+    --btn-secondary: #718096;
 
     /* 陰影效果 */
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
-    --shadow-lg: 0 10px 30px rgba(0,0,0,0.12);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.2);
+
+    /* 漸變 */
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
 /* --- 基礎樣式重置與整體佈局 --- */
@@ -31,26 +42,73 @@
 
 body {
     font-family: var(--font-main);
-    background: linear-gradient(135deg, #eef2f7 0%, #f7f9fc 40%, #ffffff 100%);
+    background: var(--gradient-bg);
+    background-attachment: fixed;
     color: var(--color-text);
     display: flex;
     flex-direction: column; /* 垂直排列子元素 */
     align-items: center; /* 水平置中 */
     min-height: 100vh; /* 確保至少佔滿整個視窗高度 */
     margin: 0;
-    padding: 20px; /* 增加頁面邊緣留白 */
+    padding: 30px 20px; /* 增加頁面邊緣留白 */
     -webkit-font-smoothing: antialiased; /* 字體抗鋸齒 */
     -moz-osx-font-smoothing: grayscale; /* 字體抗鋸齒 */
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+body > * {
+    position: relative;
+    z-index: 1;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 40px;
+    animation: fadeInDown 0.6s ease-out;
 }
 
 h1 {
-    font-size: 2.8rem; /* 標題字體大小 */
-    font-weight: 700;
-    color: #2c3e50; /* 比一般文字更深的顏色 */
-    text-shadow: 0 2px 6px rgba(0,0,0,0.08); /* 輕微文字陰影 */
-    margin-bottom: 30px; /* 增加與遊戲容器的間距 */
+    font-size: 3rem;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0 0 10px 0;
     text-align: center;
-    letter-spacing: 0.5px;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+}
+
+.subtitle {
+    font-size: 1.1rem;
+    color: var(--color-text-light);
+    margin: 0;
+    font-weight: 500;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* --- 遊戲容器 --- */
@@ -58,14 +116,27 @@ h1 {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 25px; /* 增加各區塊間距 */
+    gap: 30px; /* 增加各區塊間距 */
     width: 100%;
-    max-width: 720px; /* 稍微放大容器，讓內容更舒展 */
-    padding: 25px;
-    background-color: var(--color-white);
-    border-radius: 15px; /* 圓角容器 */
-    box-shadow: var(--shadow-lg); /* 顯著陰影 */
-    border: 1px solid var(--color-border);
+    max-width: 800px; /* 稍微放大容器，讓內容更舒展 */
+    padding: 40px 30px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 24px; /* 更大的圓角 */
+    box-shadow: var(--shadow-xl); /* 更顯著的陰影 */
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* --- 計分板 --- */
@@ -78,33 +149,58 @@ h1 {
 
 .score-box {
     flex: 1; /* 平均分配寬度 */
-    font-size: 1.25em; /* 調整字體大小 */
+    font-size: 1.15em; /* 調整字體大小 */
     font-weight: 600;
-    padding: 15px 10px; /* 調整 padding */
-    border-radius: 12px; /* 圓角分數框 */
-    background-color: var(--color-white);
-    color: #95a5a6; /* 非活躍玩家的分數顏色 */
+    padding: 18px 15px; /* 調整 padding */
+    border-radius: 16px; /* 圓角分數框 */
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+    color: var(--color-text-light); /* 非活躍玩家的分數顏色 */
     border: 2px solid var(--color-border);
     box-shadow: var(--shadow-sm);
     text-align: center;
-    transition: all 0.3s ease; /* 平滑過渡效果 */
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 平滑過渡效果 */
+    position: relative;
+    overflow: hidden;
+}
+
+.score-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s;
+}
+
+.score-box.active::before {
+    left: 100%;
 }
 
 /* 玩家 1 啟用狀態 */
 .score-box.active {
     border-color: var(--p1-color);
     color: var(--p1-color);
-    background-color: var(--p1-bg);
-    transform: scale(1.03); /* 輕微放大 */
-    box-shadow: 0 4px 10px rgba(52, 152, 219, 0.2); /* 藍色陰影 */
+    background: linear-gradient(135deg, var(--p1-bg) 0%, var(--p1-bg-hover) 100%);
+    transform: scale(1.05) translateY(-2px); /* 輕微放大和上移 */
+    box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3); /* 藍色陰影 */
 }
 
 /* 玩家 2 (或電腦) 啟用狀態 */
 .score-box.player2.active {
     border-color: var(--p2-color);
     color: var(--p2-color);
-    background-color: var(--p2-bg);
-    box-shadow: 0 4px 10px rgba(231, 76, 60, 0.2); /* 紅色陰影 */
+    background: linear-gradient(135deg, var(--p2-bg) 0%, var(--p2-bg-hover) 100%);
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 8px 20px rgba(245, 101, 101, 0.3); /* 紅色陰影 */
+}
+
+.score-box span {
+    font-size: 1.3em;
+    font-weight: 700;
+    display: inline-block;
+    margin-left: 8px;
 }
 
 /* --- 遊戲畫布 --- */
@@ -121,31 +217,74 @@ canvas {
 /* --- 按鈕樣式 --- */
 .btn {
     font-family: var(--font-main);
-    font-size: 1.05rem; /* 稍微增大字體 */
-    font-weight: 700;
-    padding: 15px 28px; /* 調整 padding */
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 14px 28px;
     border: none;
-    border-radius: 10px; /* 圓角按鈕 */
+    border-radius: 12px;
     cursor: pointer;
-    box-shadow: var(--shadow-sm);
-    transition: all 0.2s ease-in-out;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: white;
-    width: 100%; /* 手機上佔滿寬度 */
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:hover::before {
+    width: 300px;
+    height: 300px;
 }
 
 .btn:hover {
-    transform: translateY(-2px) scale(1.01); /* 輕微上浮和放大 */
-    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
+
 .btn:active {
-    transform: translateY(0) scale(0.99);
+    transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
 }
 
-.btn.primary { background-color: var(--btn-primary); }
-.btn.success { background-color: var(--btn-success); }
-.btn.danger  { background-color: var(--btn-danger); }
-.btn.secondary { background-color: var(--btn-secondary); } /* 【新增】 */
+.btn-icon {
+    font-size: 1.2em;
+    display: inline-block;
+    transition: transform 0.3s;
+}
+
+.btn:hover .btn-icon {
+    transform: rotate(180deg);
+}
+
+.btn.primary { 
+    background: linear-gradient(135deg, var(--btn-primary) 0%, var(--btn-primary-hover) 100%);
+}
+.btn.success { 
+    background: linear-gradient(135deg, var(--btn-success) 0%, var(--btn-success-hover) 100%);
+}
+.btn.danger  { 
+    background: linear-gradient(135deg, var(--btn-danger) 0%, var(--btn-danger-hover) 100%);
+}
+.btn.secondary { 
+    background-color: var(--btn-secondary); 
+}
 
 /* --- 按鈕控制區 --- */
 #action-bar {
@@ -158,18 +297,37 @@ canvas {
 /* --- 遊戲結束訊息 --- */
 #game-over-message {
     text-align: center;
-    padding: 15px;
-    background-color: #f0f0f0;
-    border-radius: 10px;
+    padding: 30px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border-radius: 16px;
     width: 100%;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-lg);
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
 #winner-text {
     display: block;
-    font-size: 2em; /* 獲勝者文字更大 */
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 5px;
+    font-size: 2.2em;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 .hidden {
@@ -180,8 +338,33 @@ canvas {
 #game-controls {
     display: flex;
     flex-direction: column; /* 手機上垂直排列 */
-    gap: 15px;
+    gap: 25px;
     width: 100%;
+}
+
+.control-section {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.4) 100%);
+    padding: 25px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: var(--shadow-sm);
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--color-border);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9rem;
+}
+
+.button-section {
+    display: flex;
+    justify-content: center;
 }
 
 /* 【新增】 按鈕群組 */
@@ -191,14 +374,26 @@ canvas {
     gap: 10px;
 }
 
-#game-mode-selector {
+#game-mode-selector,
+#board-size-selector,
+#line-length-selector {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px; /* 標籤與選單間距 */
-    font-size: 1.05rem;
+    gap: 12px;
+    font-size: 1rem;
     font-weight: 600;
-    padding: 10px 0; /* 輕微垂直 padding */
+    padding: 12px 0;
+    flex-wrap: wrap;
+}
+
+#game-mode-selector label,
+#board-size-selector label,
+#line-length-selector label {
+    color: var(--color-text);
+    font-weight: 600;
+    min-width: 100px;
+    text-align: right;
 }
 
 #game-mode {
@@ -220,32 +415,43 @@ canvas {
 }
 
 /* --- 棋盤大小輸入樣式 --- */
-#board-size-selector {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    font-size: 1.05rem;
-    font-weight: 600;
+.separator {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin: 0 5px;
 }
 
-#board-size, #board-rows, #board-cols {
+#board-size, #board-rows, #board-cols, #line-length, #game-mode {
     font-family: var(--font-main);
     font-size: 1rem;
-    font-weight: 700;
-    width: 90px;
-    padding: 10px 12px;
-    border-radius: 8px;
+    font-weight: 600;
+    padding: 12px 16px;
+    border-radius: 10px;
     border: 2px solid var(--color-border);
-    background-color: var(--color-white);
+    background: rgba(255, 255, 255, 0.8);
     color: var(--color-text);
     outline: none;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    min-width: 100px;
 }
 
-#board-size:focus, #board-rows:focus, #board-cols:focus {
+#board-rows, #board-cols, #line-length {
+    width: 100px;
+    text-align: center;
+}
+
+#game-mode {
+    flex: 1;
+    max-width: 200px;
+}
+
+#board-size:focus, #board-rows:focus, #board-cols:focus,
+#line-length:focus, #game-mode:focus {
     border-color: var(--p1-color);
-    box-shadow: 0 0 0 4px rgba(52, 152, 219, 0.12);
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 0 0 4px rgba(66, 153, 225, 0.15);
+    transform: translateY(-2px);
 }
 
 /* 隱藏 number input 的箭頭，保持一致視覺 */
@@ -381,11 +587,25 @@ input[type=number] {
         width: auto;
         min-width: 150px;
     }
+    #game-mode-selector label,
+    #board-size-selector label,
+    #line-length-selector label {
+        min-width: 120px;
+        text-align: left;
+    }
+    
     #game-mode-selector {
-        justify-content: flex-start; /* 左對齊 */
+        justify-content: flex-start;
     }
     #board-size-selector {
         justify-content: flex-start;
+    }
+    #line-length-selector {
+        justify-content: flex-start;
+    }
+    
+    .control-section {
+        padding: 30px;
     }
 }
 
