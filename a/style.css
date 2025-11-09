@@ -1,0 +1,725 @@
+/* --- CSS 變數：方便管理顏色和常用值 --- */
+:root {
+    --font-main: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --color-bg: #f0f4f8; /* 淺藍灰背景 */
+    --color-text: #2d3748; /* 深藍灰色文本 */
+    --color-text-light: #718096; /* 淺灰色文本 */
+    --color-border: #e2e8f0; /* 淺灰色邊框 */
+    --color-white: #ffffff;
+    
+    /* 玩家顏色 */
+    --p1-color: #4299e1; /* 藍色 */
+    --p1-bg: #ebf8ff; /* 淺藍背景 */
+    --p1-bg-hover: #bee3f8;
+    --p2-color: #f56565; /* 紅色 */
+    --p2-bg: #fff5f5; /* 淺紅背景 */
+    --p2-bg-hover: #fed7d7;
+    
+    /* 【新增】平手顏色 (可供 JS 使用) */
+    --color-tie: #718096; 
+    --color-tie-bg: #f7fafc;
+
+    /* 按鈕顏色 */
+    --btn-primary: #4299e1;
+    --btn-primary-hover: #3182ce;
+    --btn-success: #48bb78;
+    --btn-success-hover: #38a169;
+    --btn-danger: #f56565;
+    --btn-danger-hover: #e53e3e;
+    --btn-secondary: #718096;
+
+    /* 陰影效果 */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.2);
+
+    /* 漸變 */
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+/* --- 基礎樣式重置與整體佈局 --- */
+* {
+    box-sizing: border-box; /* 確保 padding 不會撐爆寬度 */
+}
+
+body {
+    font-family: var(--font-main);
+    background: var(--gradient-bg);
+    background-attachment: fixed;
+    color: var(--color-text);
+    display: flex;
+    flex-direction: column; /* 垂直排列子元素 */
+    align-items: center; /* 水平置中 */
+    min-height: 100vh; /* 確保至少佔滿整個視窗高度 */
+    margin: 0;
+    padding: 30px 20px; /* 增加頁面邊緣留白 */
+    -webkit-font-smoothing: antialiased; /* 字體抗鋸齒 */
+    -moz-osx-font-smoothing: grayscale; /* 字體抗鋸齒 */
+    position: relative;
+    overflow-x: hidden; /* 防止背景動畫溢出 */
+}
+
+/* 【修改】背景元素，增加動畫效果 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* 修改為可動畫的背景 */
+    background: radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 40%);
+    background-size: 200% 200%; /* 讓背景位置可以移動 */
+    pointer-events: none;
+    z-index: 0;
+    /* 【新增】套用背景動畫 */
+    animation: subtleGradientShift 20s ease infinite;
+}
+
+body > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* 【新增】背景動畫 Keyframes */
+@keyframes subtleGradientShift {
+    0% {
+        background-position: 0% 0%;
+    }
+    50% {
+        background-position: 100% 100%;
+    }
+    100% {
+        background-position: 0% 0%;
+    }
+}
+
+header {
+    text-align: center;
+    margin-bottom: 40px;
+    animation: fadeInDown 0.6s ease-out;
+}
+
+h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0 0 10px 0;
+    text-align: center;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+}
+
+.subtitle {
+    font-size: 1.1rem;
+    color: var(--color-text-light);
+    margin: 0;
+    font-weight: 500;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- 遊戲容器 --- */
+#game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px; /* 增加各區塊間距 */
+    width: 100%;
+    max-width: 800px; /* 稍微放大容器，讓內容更舒展 */
+    padding: 40px 30px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 24px; /* 更大的圓角 */
+    box-shadow: var(--shadow-xl); /* 更顯著的陰影 */
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- 計分板 --- */
+#status-bar {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    gap: 15px; /* 增加分數框間距 */
+}
+
+.score-box {
+    flex: 1; /* 平均分配寬度 */
+    font-size: 1.15em; /* 調整字體大小 */
+    font-weight: 600;
+    padding: 18px 15px; /* 調整 padding */
+    border-radius: 16px; /* 圓角分數框 */
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+    color: var(--color-text-light); /* 非活躍玩家的分數顏色 */
+    border: 2px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 平滑過Transition效果 */
+    position: relative;
+    overflow: hidden;
+}
+
+.score-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s;
+}
+
+.score-box.active::before {
+    left: 100%;
+}
+
+/* 【新增】玩家光暈動畫 */
+@keyframes activeGlowP1 {
+    0% { box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3); }
+    50% { box-shadow: 0 8px 30px rgba(66, 153, 225, 0.5); }
+    100% { box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3); }
+}
+
+@keyframes activeGlowP2 {
+    0% { box-shadow: 0 8px 20px rgba(245, 101, 101, 0.3); }
+    50% { box-shadow: 0 8px 30px rgba(245, 101, 101, 0.5); }
+    100% { box-shadow: 0 8px 20px rgba(245, 101, 101, 0.3); }
+}
+
+
+/* 玩家 1 啟用狀態 【修改】*/
+.score-box.active {
+    border-color: var(--p1-color);
+    color: var(--p1-color);
+    background: linear-gradient(135deg, var(--p1-bg) 0%, var(--p1-bg-hover) 100%);
+    transform: scale(1.05) translateY(-2px); /* 輕微放大和上移 */
+    /* box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3); */ /* 改用動畫 */
+    animation: activeGlowP1 2s infinite ease-in-out; /* 【套用】光暈動畫 */
+}
+
+/* 玩家 2 (或電腦) 啟用狀態 【修改】*/
+.score-box.player2.active {
+    border-color: var(--p2-color);
+    color: var(--p2-color);
+    background: linear-gradient(135deg, var(--p2-bg) 0%, var(--p2-bg-hover) 100%);
+    transform: scale(1.05) translateY(-2px);
+    /* box-shadow: 0 8px 20px rgba(245, 101, 101, 0.3); */ /* 改用動畫 */
+    animation: activeGlowP2 2s infinite ease-in-out; /* 【套用】光暈動畫 */
+}
+
+.score-box span {
+    font-size: 1.3em;
+    font-weight: 700;
+    display: inline-block;
+    margin-left: 8px;
+}
+
+/* --- 遊戲畫布 --- */
+canvas {
+    background-color: var(--color-white);
+    border-radius: 15px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    width: 100%; /* 響應式寬度 */
+    height: auto; /* 高度自動 */
+}
+
+/* --- 按鈕樣式 --- */
+.btn {
+    font-family: var(--font-main);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 14px 28px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: white;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-icon {
+    font-size: 1.2em;
+    display: inline-block;
+    transition: transform 0.3s;
+}
+
+/* 【修改】一般按鈕圖示旋轉 (保留) */
+.btn:hover .btn-icon {
+    transform: rotate(180deg);
+}
+
+/* 【新增】重設按鈕的專屬旋轉動畫 */
+#reset-button:hover .btn-icon {
+    transform: rotate(360deg);
+}
+
+
+.btn.primary { 
+    background: linear-gradient(135deg, var(--btn-primary) 0%, var(--btn-primary-hover) 100%);
+}
+.btn.success { 
+    background: linear-gradient(135deg, var(--btn-success) 0%, var(--btn-success-hover) 100%);
+}
+.btn.danger  { 
+    background: linear-gradient(135deg, var(--btn-danger) 0%, var(--btn-danger-hover) 100%);
+}
+.btn.secondary { 
+    background-color: var(--btn-secondary); 
+}
+
+/* --- 按鈕控制區 --- */
+#action-bar {
+    display: flex;
+    gap: 15px;
+    width: 100%;
+    flex-direction: column; /* 手機上垂直排列 */
+}
+
+/* --- 遊戲結束訊息 --- */
+#game-over-message {
+    text-align: center;
+    padding: 30px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border-radius: 16px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+#winner-text {
+    display: block;
+    font-size: 2.2em;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+/* (可選) 增加平手樣式，需配合 JS 加入 .tie-game class */
+#game-over-message.tie-game #winner-text {
+    background: linear-gradient(135deg, var(--color-tie) 0%, var(--color-text) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- 遊戲控制區 (重新開始, 模式選擇) --- */
+/* 【修改】移除 #game-controls 的排版樣式，只保留寬度 */
+#game-controls {
+    /* display: flex; (移除) */
+    /* flex-direction: column; (移除) */
+    /* gap: 25px; (移除) */
+    width: 100%;
+}
+
+/* 【修改】control-section 現在是主容器 */
+.control-section {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.4) 100%);
+    padding: 25px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: var(--shadow-sm);
+    
+    /* 【新增】內部排版 */
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 0 0; /* 【修改】移除 margin-bottom */
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--color-border);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9rem;
+}
+
+/* 【刪除】button-section 樣式 */
+/*
+.button-section {
+    display: flex;
+    justify-content: center;
+}
+*/
+
+/* 【刪除】#control-buttons 樣式 (已無作用) */
+/*
+#control-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+*/
+
+/* 【新增】設定選項的 Grid 容器 (手機版) */
+.settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* 選項之間的間距 */
+}
+
+
+/* 【已修改】包含 score-again-selector */
+#game-mode-selector,
+#board-size-selector,
+#line-length-selector,
+#score-again-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0; /* 【修改】移除 padding，由 .settings-grid 控制間距 */
+    flex-wrap: wrap;
+}
+
+/* 【已修改】包含 score-again-selector label */
+#game-mode-selector label,
+#board-size-selector label,
+#line-length-selector label,
+#score-again-selector label {
+    color: var(--color-text);
+    font-weight: 600;
+    min-width: 100px;
+    text-align: right;
+}
+
+#game-mode {
+    font-family: var(--font-main);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 10px 15px; /* 調整選單 padding */
+    border-radius: 8px;
+    border: 2px solid var(--color-border);
+    background-color: var(--color-white);
+    color: var(--color-text);
+    appearance: none; /* 移除預設下拉箭頭 */
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23bbbbbb%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13.8-6.1H19.2c-7.5%200-13.8%204-16.3%2010.5-2.5%206.5-.5%2013.7%205.1%2018.1l128.5%20120.4c5.7%205.3%2013.7%208.2%2022%208.2s16.3-2.9%2022-8.2l128.5-120.4c5.6-4.4%207.6-11.6%205.1-18.1z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+    padding-right: 35px; /* 為箭頭騰出空間 */
+    cursor: pointer;
+}
+
+/* --- 棋盤大小輸入樣式 --- */
+.separator {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin: 0 5px;
+}
+
+/* 【已修改】包含 score-again-mode */
+#board-size, #board-rows, #board-cols, #line-length, #game-mode,
+#score-again-mode {
+    font-family: var(--font-main);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 2px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--color-text);
+    outline: none;
+    transition: all 0.3s ease;
+    min-width: 100px;
+}
+
+#board-rows, #board-cols, #line-length {
+    width: 100px;
+    text-align: center;
+}
+
+/* 【已修改】包含 score-again-mode */
+#game-mode, #score-again-mode {
+    flex: 1;
+    max-width: 200px;
+}
+
+/* 【已修改】包含 score-again-mode:focus */
+#board-size:focus, #board-rows:focus, #board-cols:focus,
+#line-length:focus, #game-mode:focus,
+#score-again-mode:focus {
+    border-color: var(--p1-color);
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 0 0 4px rgba(66, 153, 225, 0.15);
+    transform: translateY(-2px);
+}
+
+/* 隱藏 number input 的箭頭，保持一致視覺 */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* 【新增】重設按鈕在手機上的置中樣式 */
+#reset-button {
+    width: auto;
+    min-width: 180px;
+    align-self: center;
+}
+
+
+/* --- 【新增】 Modal 彈窗樣式 --- */
+.modal-hidden {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-backdrop {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5); /* 半透明黑色背景 */
+    z-index: 1001;
+}
+
+.modal-content {
+    position: relative;
+    z-index: 1002;
+    background-color: var(--color-white);
+    margin: 15px;
+    padding: 25px 30px;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+    max-width: 500px;
+    width: 90%;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: #2c3e50;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.modal-content ul {
+    padding-left: 20px;
+    line-height: 1.6;
+}
+
+.modal-content ul li {
+    margin-bottom: 10px;
+}
+
+.modal-content #close-rules-button {
+    width: 100%; /* 關閉按鈕佔滿寬度 */
+    margin-top: 20px;
+}
+
+/* 顯示 Modal */
+.modal-visible {
+    display: flex;
+}
+
+/* Modal 動畫 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+
+/* --- 媒體查詢 (針對平板和桌機) --- */
+@media (min-width: 550px) {
+    h1 {
+        font-size: 3.2rem;
+    }
+
+    #game-container {
+        padding: 35px;
+        gap: 30px;
+    }
+
+    #status-bar {
+        gap: 20px;
+    }
+
+    .score-box {
+        font-size: 1.4em;
+    }
+
+    /* 將按鈕改回水平排列 */
+    #action-bar {
+        flex-direction: row;
+    }
+    
+    .btn {
+        width: auto; /* 按鈕恢復自動寬度 */
+        min-width: 150px; /* 確保按鈕有最小寬度 */
+    }
+    
+    /* 【刪除】舊的 #game-controls 排版 */
+    /*
+    #game-controls {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+    }
+    */
+
+    /* 【刪除】舊的 #control-buttons 排版 */
+    /*
+    #control-buttons {
+        flex-direction: row;
+        gap: 15px;
+    }
+    */
+    
+    /* 【修改】重設按鈕在桌機版上保持置中 */
+    #reset-button {
+        width: auto;
+        min-width: 180px;
+        align-self: center; /* 保持置中 */
+    }
+    
+    /* 【新增】桌機版 .settings-grid 改為 2 欄 */
+    .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px 30px; /* row-gap, column-gap */
+    }
+    
+    
+    /* 【已修改】包含 score-again-selector label */
+    #game-mode-selector label,
+    #board-size-selector label,
+    #line-length-selector label,
+    #score-again-selector label {
+        min-width: 120px;
+        text-align: left;
+    }
+    
+    /* 【修改】設定選項的 justify-content 改為 flex-start */
+    #game-mode-selector,
+    #board-size-selector,
+    #line-length-selector,
+    #score-again-selector {
+        justify-content: flex-start;
+    }
+    
+    /* 【已新增】 */
+    #score-again-selector {
+        justify-content: flex-start;
+    }
+    
+    .control-section {
+        padding: 30px;
+    }
+}
+
+/* 確保畫布上的文字顏色和背景有足夠對比 */
+canvas {
+    color: var(--color-text); /* 確保畫布上的文字繼承主文本顏色 */
+}
