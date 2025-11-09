@@ -11,14 +11,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionBar = document.getElementById('action-bar');
     const resetButton = document.getElementById('reset-button');
     const exportPngButton = document.getElementById('export-png-button');
-    // 【新增】匯出 CSV 按鈕
     const exportCsvButton = document.getElementById('export-csv-button');
+    const aiThinkingIndicator = document.getElementById('ai-thinking-indicator');
     
     const gameModeSelect = document.getElementById('game-mode');
     const boardRowsInput = document.getElementById('board-rows');
     const boardColsInput = document.getElementById('board-cols');
     const lineLengthInput = document.getElementById('line-length');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
+
+    // 【新增】批次處理 UI 元素
+    const batchControls = document.getElementById('batch-controls');
+    const startBatchButton = document.getElementById('start-batch-button');
+    const stopBatchButton = document.getElementById('stop-batch-button');
+    const batchGamesInput = document.getElementById('batch-games-input');
+    const batchStatus = document.getElementById('batch-status');
+    const progressBarInner = document.getElementById('progress-bar-inner');
+    const gameControls = document.getElementById('game-controls');
+
+    // AI Web Worker
+    let aiWorker;
+    if (window.Worker) {
+        aiWorker = new Worker('ai-worker.js');
+        aiWorker.onmessage = handleWorkerMessage;
+        aiWorker.onerror = handleWorkerError;
+    } else {
+        console.error("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
+        alert("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
+    }
+
 
     // 遊戲設定
     let gridRows = 4;
@@ -50,19 +71,73 @@ document.addEventListener('DOMContentLoaded', () => {
     let gameMode = 'pvp';
     let scoreAndGo = true;
     
-    // 【新增】對戰紀錄
     let moveHistory = [];
     let turnCounter = 1;
 
     // 動畫相關變數
-    const ANIMATION_DURATION = 500;
+    let ANIMATION_DURATION = 500; // 【修改】從 const 改為 let
     let animationStartTime = 0;
     let isAnimating = false;
     let currentDotRadius = DOT_RADIUS;
 
-    // 初始化遊戲
+    // 【新增】批次處理狀態
+    let batchZip;
+    let isBatchRunning = false;
+    let totalGamesToRun = 0;
+    let currentGameNumber = 1;
+
+
+    // --- AI Worker 訊息處理 ---
+    
+    function handleWorkerMessage(e) {
+        const { type, dotA, dotB } = e.data;
+        
+        aiThinkingIndicator.classList.add('hidden');
+
+        if (type === 'bestMoveFound') {
+            const mainDotA = dots[dotA.r][dotA.c];
+            const mainDotB = dots[dotB.r][dotB.c];
+            executeAIMove(mainDotA, mainDotB);
+        } else if (type === 'noMoveFound') {
+            console.warn("AI Worker 回報找不到移動。");
+            switchPlayer();
+            if (!isAnimating && !isBatchRunning) canvas.style.pointerEvents = 'auto';
+        }
+    }
+
+    function handleWorkerError(error) {
+        console.error("AI Worker 發生錯誤:", error.message, error);
+        aiThinkingIndicator.classList.add('hidden');
+        
+        if (isBatchRunning) {
+            alert("AI 運算時發生嚴重錯誤，批次處理已終止。");
+            stopBatchProcess();
+        } else {
+            alert("AI 運算時發生嚴重錯誤，請重設遊戲。");
+        }
+    }
+
+
+    // --- 遊戲核心函式 ---
+
     function initGame() {
-        // ( ... 讀取設定 ... )
+        if (isBatchRunning) {
+            // 批次模式: 強制設定並跳過動畫
+            gameMode = 'cvc';
+            gameModeSelect.value = 'cvc';
+            ANIMATION_DURATION = 0; // 跳過動畫
+            
+            // 更新狀態
+            const percent = (Math.max(0, currentGameNumber - 1) / totalGamesToRun) * 100;
+            batchStatus.querySelector('p').textContent = `處理中... (遊戲 ${currentGameNumber} / ${totalGamesToRun})`;
+            progressBarInner.style.width = `${percent}%`;
+
+        } else {
+            // 正常模式: 讀取 UI
+            gameMode = gameModeSelect.value;
+            ANIMATION_DURATION = 500;
+        }
+
         const desiredRows = parseInt(boardRowsInput && boardRowsInput.value ? boardRowsInput.value : '4', 10);
         const desiredCols = parseInt(boardColsInput && boardColsInput.value ? boardColsInput.value : '4', 10);
         gridRows = Math.max(2, Math.min(12, isNaN(desiredRows) ? 4 : desiredRows));
@@ -76,11 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
             lineLengthInput.value = String(maxLineLength);
             lineLengthInput.max = maxAllowedLength;
         }
+        
         const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
         const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
-        gameMode = gameModeSelect.value;
+        
         scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
         
         if (gameMode === 'pvc' || gameMode === 'cvc') {
@@ -97,8 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedDot2 = null;
         actionBar.classList.add('hidden');
         gameOverMessage.classList.add('hidden');
-        
-        // 【新增】重設對戰紀錄
+        aiThinkingIndicator.classList.add('hidden');
         moveHistory = [];
         turnCounter = 1;
 
@@ -151,13 +226,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         updateUI();
 
-        // 啟動開始動畫
         isAnimating = true;
         animationStartTime = 0;
         currentDotRadius = 0;
         canvas.style.pointerEvents = 'none';
         
-        requestAnimationFrame(animationLoop);
+        if (isBatchRunning || ANIMATION_DURATION === 0) {
+            // 【修改】批次模式: 跳過動畫
+            isAnimating = false;
+            currentDotRadius = DOT_RADIUS;
+            drawCanvasInternal(); // 直接畫最終畫面
+            // 手動觸發 AI
+            if (gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) {
+                 checkAndTriggerAIMove();
+            }
+        } else {
+            // 正常模式: 播放動畫
+            requestAnimationFrame(animationLoop);
+        }
     }
     
     // 遊戲開始動畫迴圈
@@ -302,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 點擊/觸控畫布
     function handleCanvasClick(e) {
-        if (isAnimating || gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2) || !actionBar.classList.contains('hidden')) {
+        if (isAnimating || isBatchRunning || gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2) || !actionBar.classList.contains('hidden')) {
             return;
         }
         
@@ -420,8 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         drawCanvas();
         updateUI();
-
-        // 【新增】紀錄這一步
+        
         logMove(dotA, dotB, scoredThisTurn);
 
         if (totalFilledSquares === totalSquares) {
@@ -448,72 +533,99 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ----- 輔助函式 -----
 
-    // 【新增】匯出 PNG 函式
-    function exportCanvasAsPNG() {
+    /**
+     * 【重構】
+     * 產生 PNG 的 data URL (用於批次處理)
+     */
+    function getCanvasAsPNGDataURL() {
         const originalRadius = currentDotRadius;
         const originalAnimating = isAnimating;
         
         isAnimating = false;
         currentDotRadius = DOT_RADIUS;
-        drawCanvasInternal(); 
+        drawCanvasInternal(); // 強制繪製最終畫面
 
         const dataUrl = canvas.toDataURL('image/png');
+
+        // 恢復原始狀態，避免閃爍 (如果不是在批次中)
+        if (!isBatchRunning) {
+            currentDotRadius = originalRadius;
+            isAnimating = originalAnimating;
+            if (!isAnimating) {
+                drawCanvas();
+            }
+        }
+        
+        return dataUrl;
+    }
+
+    /**
+     * 【重構】
+     * 觸發單一 PNG 下載
+     */
+    function downloadPNG() {
+        const dataUrl = getCanvasAsPNGDataURL();
         const link = document.createElement('a');
         link.href = dataUrl;
         link.download = 'dots-and-boxes-board.png'; 
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
-        currentDotRadius = originalRadius;
-        isAnimating = originalAnimating;
-        if (!isAnimating) {
-             drawCanvas();
-        }
     }
     
-    // 【新增】匯出 CSV 紀錄函式
-    function exportHistoryToCSV() {
+    /**
+     * 【重構】
+     * 產生 CSV 內容字串 (用於批次處理)
+     */
+    function generateCSVString() {
         if (moveHistory.length === 0) {
-            alert("目前沒有任何對戰紀錄。");
-            return;
+            return null;
         }
-
-        // 取得 P1 和 P2 的名稱
         const p1Name = getPlayerName(1);
         const p2Name = getPlayerName(2);
-
         const headers = `Turn,Player,Move (From R_C),Scored,${p1Name} Score,${p2Name} Score`;
         let csvContent = headers + "\n";
-
         moveHistory.forEach(move => {
             const row = [
                 move.turn,
                 move.player,
-                `"${move.move}"`, // 加上引號以防萬一
+                `"${move.move}"`,
                 move.scored,
                 move.scoreP1,
                 move.scoreP2
             ].join(",");
             csvContent += row + "\n";
         });
+        
+        // 【新增】加入遊戲結果
+        const winnerMessage = getWinnerMessage();
+        csvContent += `\nResult,${winnerMessage}\n`;
+        
+        return csvContent;
+    }
 
-        // 建立 Blob 並觸發下載
-        // 加入 \uFEFF (BOM) 確保 Excel 能正確讀取 UTF-8
+    /**
+     * 【重構】
+     * 觸發單一 CSV 下載
+     */
+    function downloadCSV() {
+        const csvContent = generateCSVString();
+        if (csvContent === null) {
+            alert("目前沒有任何對戰紀錄。");
+            return;
+        }
+        
         const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
-        
         link.setAttribute('href', url);
         link.setAttribute('download', 'dots-and-boxes-history.csv');
         link.style.visibility = 'hidden';
-        
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     }
     
-    // 【新增】取得玩家名稱的輔助函式
     function getPlayerName(playerNumber) {
         if (gameMode === 'cvc') {
             return (playerNumber === 1) ? "電腦 1" : "電腦 2";
@@ -524,7 +636,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // 【新增】紀錄每一步的函式
     function logMove(dotA, dotB, scored) {
         const moveData = {
             turn: turnCounter,
@@ -535,13 +646,10 @@ document.addEventListener('DOMContentLoaded', () => {
             scoreP2: scores[2]
         };
         moveHistory.push(moveData);
-        
-        // 只有在沒有得分或規則不允許連續時才增加回合數
         if (!(scored && scoreAndGo)) {
              turnCounter++;
         }
     }
-
 
     function isGameOver() {
         return !gameOverMessage.classList.contains('hidden');
@@ -590,9 +698,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let next_c = c + dc;
             let segmentId = null;
 
-            if (dr === 0) { // 橫線
+            if (dr === 0) {
                 segmentId = `H_${r},${Math.min(c, next_c)}`;
-            } else if (dc === 0) { // 直線
+            } else if (dc === 0) {
                 segmentId = `V_${Math.min(r, next_r)},${c}`;
             }
 
@@ -613,7 +721,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUI() {
-        // 【修改】使用 getPlayerName 輔助函式
         const player1Name = getPlayerName(1);
         const player2Name = getPlayerName(2);
         
@@ -629,11 +736,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function endGame() {
-        // 【修改】使用 getPlayerName 輔助函式
+    function getWinnerMessage() {
         const player1Name = getPlayerName(1);
         const player2Name = getPlayerName(2);
-
         let winnerMessage = "";
         if (scores[1] > scores[2]) {
             winnerMessage = `${player1Name} 獲勝！`;
@@ -642,307 +747,113 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             winnerMessage = "平手！";
         }
+        return winnerMessage;
+    }
+
+    /**
+     * 【已修改】
+     * 遊戲結束函式，加入批次處理邏輯
+     */
+    function endGame() {
+        aiThinkingIndicator.classList.add('hidden');
         
-        winnerText.textContent = winnerMessage;
-        gameOverMessage.classList.remove('hidden');
-        actionBar.classList.add('hidden');
-        canvas.style.pointerEvents = 'auto';
+        if (isBatchRunning) {
+            // --- 批次模式 ---
+            
+            // 1. 產生 CSV 內容
+            const csvData = generateCSVString();
+            if (csvData) {
+                batchZip.file(`game_${currentGameNumber}/history.csv`, "\uFEFF" + csvData);
+            }
+
+            // 2. 產生 PNG 內容 (Base64)
+            const pngDataURL = getCanvasAsPNGDataURL();
+            const pngBase64 = pngDataURL.split(',')[1];
+            if (pngBase64) {
+                batchZip.file(`game_${currentGameNumber}/board.png`, pngBase64, { base64: true });
+            }
+
+            // 3. 推進
+            currentGameNumber++;
+
+            if (currentGameNumber <= totalGamesToRun) {
+                // 執行下一場
+                setTimeout(initGame, 20); // 短暫延遲以釋放 UI 執行緒
+            } else {
+                // 全部完成了
+                batchStatus.querySelector('p').textContent = `已完成 ${totalGamesToRun} 場遊戲！`;
+                progressBarInner.style.width = `100%`;
+                downloadBatchZip();
+                stopBatchProcess();
+            }
+
+        } else {
+            // --- 正常模式 ---
+            const winnerMessage = getWinnerMessage();
+            winnerText.textContent = winnerMessage;
+            gameOverMessage.classList.remove('hidden');
+            actionBar.classList.add('hidden');
+            canvas.style.pointerEvents = 'auto';
+        }
     }
     
     // --- AI 相關函式 ---
-    // ( ... checkAndTriggerAIMove, calculateChainReaction, aiMove ... )
-    // ( ... findBestLongLineMove, evaluateMove ... )
 
+    /**
+     * 【已修改】
+     * 觸發 AI 運算，並顯示「運算中」
+     */
     function checkAndTriggerAIMove() {
         if ((gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) && !isGameOver() && !isAnimating) {
-            canvas.style.pointerEvents = 'none';
-            actionBar.classList.add('hidden');
             
-            const aiDelay = (gameMode === 'cvc') ? 200 : 600;
+            if (!isBatchRunning) {
+                canvas.style.pointerEvents = 'none';
+                actionBar.classList.add('hidden');
+                
+                aiThinkingIndicator.classList.remove('hidden');
+                if (currentPlayer === 2) {
+                    aiThinkingIndicator.classList.add('player2');
+                } else {
+                    aiThinkingIndicator.classList.remove('player2');
+                }
+            }
             
-            setTimeout(() => {
-                aiMove();
-            }, aiDelay);
+            const gameState = {
+                lines: JSON.parse(JSON.stringify(lines)),
+                squares: JSON.parse(JSON.stringify(squares)),
+                scores: { ...scores },
+                currentPlayer: currentPlayer,
+                gridRows: gridRows,
+                gridCols: gridCols
+            };
+            
+            const settings = {
+                scoreAndGo: scoreAndGo,
+                maxLineLength: maxLineLength
+            };
+
+            if (aiWorker) {
+                 aiWorker.postMessage({ 
+                    type: 'startSearch', 
+                    gameState: gameState, 
+                    settings: settings 
+                });
+            } else {
+                console.error("AI Worker 尚未初始化!");
+                if (!isBatchRunning) aiThinkingIndicator.classList.add('hidden');
+            }
+            
         } else {
-            if (gameMode === 'pvp' || (gameMode === 'pvc' && currentPlayer === 1)) {
+            if (!isBatchRunning && (gameMode === 'pvp' || (gameMode === 'pvc' && currentPlayer === 1))) {
                     canvas.style.pointerEvents = 'auto';
             }
         }
     }
 
-    function calculateChainReaction(aiSacrificeSegment) {
-        let totalChainLength = 0;
-        const simulatedDrawnLines = new Set();
-        simulatedDrawnLines.add(aiSacrificeSegment.id); 
-        const startingBoxes = [];
-        for (const sq of squares) {
-            if (sq.filled || !sq.lineKeys.includes(aiSacrificeSegment.id)) {
-                continue;
-            }
-            let sidesDrawn = 0;
-            sq.lineKeys.forEach(key => {
-                if (lines[key].players.length > 0) sidesDrawn++;
-            });
-            if (sidesDrawn === 2) {
-                startingBoxes.push(sq);
-            }
-        }
-        const boxQueue = [...startingBoxes];
-        const processedBoxes = new Set(startingBoxes.map(sq => sq.lineKeys.join(','))); 
-        while (boxQueue.length > 0) {
-            const currentBox = boxQueue.shift();
-            totalChainLength++;
-            currentBox.lineKeys.forEach(key => simulatedDrawnLines.add(key));
-            for (const lineKey of currentBox.lineKeys) {
-                for (const adjacentSq of squares) {
-                    const adjacentBoxId = adjacentSq.lineKeys.join(',');
-                    if (adjacentSq === currentBox || adjacentSq.filled || processedBoxes.has(adjacentBoxId)) {
-                        continue;
-                    }
-                    if (adjacentSq.lineKeys.includes(lineKey)) {
-                        let adjacentSidesDrawn = 0;
-                        let fourthSide = null;
-                        for (const adjKey of adjacentSq.lineKeys) {
-                            if (lines[adjKey].players.length > 0 || simulatedDrawnLines.has(adjKey)) {
-                                adjacentSidesDrawn++;
-                            } else {
-                                fourthSide = adjKey;
-                            }
-                        }
-                        if (adjacentSidesDrawn === 3 && fourthSide !== null) {
-                            boxQueue.push(adjacentSq);
-                            processedBoxes.add(adjacentBoxId);
-                        }
-                    }
-                }
-            }
-        }
-        return totalChainLength;
-    }
-
-    function aiMove() {
-        if (maxLineLength > 1) {
-            const longLineMove = findBestLongLineMove();
-            if (longLineMove) {
-                executeAIMove(longLineMove.dotA, longLineMove.dotB);
-                return;
-            } else {
-                if (!isGameOver()) switchPlayer();
-                if (gameMode === 'cvc') checkAndTriggerAIMove();
-                return;
-            }
-        }
-        let availableSegments = [];
-        for (const id in lines) {
-            if (lines[id].players.length === 0) {
-                availableSegments.push(lines[id]);
-            }
-        }
-        if (availableSegments.length === 0) {
-            if (!isGameOver()) switchPlayer();
-            if (gameMode === 'cvc') checkAndTriggerAIMove();
-            return;
-        }
-        let winningMoves = [];
-        let safeMoves = [];
-        let minorUnsafeMoves = [];
-        let criticalUnsafeMoves = [];
-        for (const segment of availableSegments) {
-            let squaresCompleted = 0;
-            let isCritical = false;
-            let isMinor = false;
-            let riskScore = 0;
-            let potentialSquares = 0;
-            squares.forEach(sq => {
-                if (sq.filled || !sq.lineKeys.includes(segment.id)) {
-                    return; 
-                }
-                let sidesDrawn = 0;
-                sq.lineKeys.forEach(key => {
-                    if (key !== segment.id && lines[key].players.length > 0) {
-                        sidesDrawn++;
-                    }
-                });
-                if (sidesDrawn === 3) {
-                    squaresCompleted++;
-                } else if (sidesDrawn === 2) {
-                    isCritical = true;
-                    riskScore += 10;
-                } else if (sidesDrawn === 1) {
-                    isMinor = true;
-                    riskScore += 2;
-                } else {
-                    potentialSquares += 0.3;
-                }
-            });
-            const moveInfo = { segment, squaresCompleted, riskScore, potentialSquares };
-            if (squaresCompleted > 0) {
-                winningMoves.push(moveInfo);
-            } else if (isCritical) {
-                criticalUnsafeMoves.push(moveInfo);
-            } else if (isMinor) {
-                minorUnsafeMoves.push(moveInfo);
-            } else {
-                safeMoves.push(moveInfo);
-            }
-        }
-        let segmentToDraw;
-        if (winningMoves.length > 0) {
-            winningMoves.sort((a, b) => {
-                if (b.squaresCompleted !== a.squaresCompleted) {
-                    return b.squaresCompleted - a.squaresCompleted;
-                }
-                return a.riskScore - b.riskScore;
-            });
-            segmentToDraw = winningMoves[0].segment;
-        } else if (safeMoves.length > 0) {
-            safeMoves.sort((a, b) => b.potentialSquares - a.potentialSquares);
-            segmentToDraw = safeMoves[0].segment;
-        } else if (minorUnsafeMoves.length > 0) {
-            minorUnsafeMoves.sort((a, b) => a.riskScore - b.riskScore);
-            segmentToDraw = minorUnsafeMoves[0].segment;
-        } else if (criticalUnsafeMoves.length > 0) {
-            let bestSacrifice = null;
-            let minChain = Infinity;
-            for (const move of criticalUnsafeMoves) {
-                const simulatedChainLength = calculateChainReaction(move.segment);
-                if (simulatedChainLength < minChain) {
-                    minChain = simulatedChainLength;
-                    bestSacrifice = move.segment;
-                }
-            }
-            segmentToDraw = bestSacrifice;
-        } else {
-            segmentToDraw = availableSegments[Math.floor(Math.random() * availableSegments.length)];
-        }
-        if (!segmentToDraw) {
-                if (!isGameOver()) switchPlayer();
-                if (gameMode === 'cvc') checkAndTriggerAIMove();
-                return;
-        }
-        const dotA = segmentToDraw.p1;
-        const dotB = segmentToDraw.p2;
-        executeAIMove(dotA, dotB);
-    }
-    
-    function findBestLongLineMove() {
-        let winningMoves = [];
-        let safeMoves = [];
-        let unsafeMoves = [];
-        for (let r = 0; r < gridRows; r++) {
-            for (let c = 0; c < gridCols; c++) {
-                const dotA = dots[r][c];
-                if (c + maxLineLength < gridCols) {
-                    const dotB = dots[r][c + maxLineLength];
-                    evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves);
-                }
-                if (r + maxLineLength < gridRows) {
-                    const dotB = dots[r + maxLineLength][c];
-                    evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves);
-                }
-            }
-        }
-        if (winningMoves.length > 0) {
-            winningMoves.sort((a, b) => {
-                if (b.squaresCompleted !== a.squaresCompleted) return b.squaresCompleted - a.squaresCompleted;
-                if (b.defensiveValue !== a.defensiveValue) return b.defensiveValue - a.defensiveValue;
-                if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-                if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
-                return b.totalNewSegments - a.totalNewSegments;
-            });
-            return winningMoves[0];
-        } else if (safeMoves.length > 0) {
-            safeMoves.sort((a, b) => {
-                if (b.defensiveValue !== a.defensiveValue) return b.defensiveValue - a.defensiveValue;
-                if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-                if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
-                if (b.potentialSquares !== a.potentialSquares) return b.potentialSquares - a.potentialSquares;
-                if (b.totalNewSegments !== a.totalNewSegments) return b.totalNewSegments - a.totalNewSegments;
-                return b.controlArea - a.controlArea;
-            });
-            return safeMoves[0];
-        } else if (unsafeMoves.length > 0) {
-            unsafeMoves.sort((a, b) => {
-                if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-                if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
-                if (a.chainRisk !== b.chainRisk) return a.chainRisk - b.chainRisk;
-                if (b.defensiveValue !== a.defensiveValue) return b.defensiveValue - a.defensiveValue;
-                return b.potentialSquares - a.potentialSquares;
-            });
-            return unsafeMoves[0];
-        }
-        return null;
-    }
-    
-    function evaluateMove(dotA, dotB, winningMoves, safeMoves, unsafeMoves) {
-        if (!isValidLine(dotA, dotB)) return;
-        const segments = getSegmentsForLine(dotA, dotB);
-        if (segments.length === 0) return;
-        const newSegments = segments.filter(seg => seg.players.length === 0);
-        if (newSegments.length === 0) return;
-        let squaresCompleted = 0;
-        let isUnsafe = false;
-        let totalNewSegments = newSegments.length;
-        let potentialSquares = 0;
-        let riskScore = 0;
-        let chainRisk = 0;
-        let defensiveValue = 0;
-        let controlArea = 0;
-        const affectedSquares = new Set();
-        segments.forEach(seg => {
-            squares.forEach(sq => {
-                if (!sq.filled && sq.lineKeys.includes(seg.id)) {
-                    affectedSquares.add(sq);
-                }
-            });
-        });
-        affectedSquares.forEach(sq => {
-            let sidesBeforeMove = 0;
-            let sidesAfterMove = 0;
-            let newSegmentsInSquare = 0;
-            sq.lineKeys.forEach(key => {
-                const line = lines[key];
-                if (line.players.length > 0) {
-                    sidesBeforeMove++;
-                    sidesAfterMove++;
-                } else if (segments.some(seg => seg.id === key)) {
-                    sidesAfterMove++;
-                    if (newSegments.some(seg => seg.id === key)) {
-                        newSegmentsInSquare++;
-                    }
-                }
-            });
-            controlArea++;
-            if (sidesBeforeMove === 3 && newSegmentsInSquare > 0) {
-                squaresCompleted++;
-                defensiveValue += 30;
-            } else if (sidesBeforeMove === 2 && newSegmentsInSquare > 0 && sidesAfterMove === 3) {
-                riskScore += 20;
-                isUnsafe = true;
-                chainRisk += 5;
-            } else if (sidesBeforeMove === 1 && newSegmentsInSquare > 0 && sidesAfterMove === 2) {
-                riskScore += 3;
-                isUnsafe = true;
-            } else if (sidesBeforeMove === 0 && newSegmentsInSquare > 0 && sidesAfterMove === 1) {
-                potentialSquares += 0.2;
-            }
-        });
-        const move = { 
-            dotA, dotB, squaresCompleted, isUnsafe, totalNewSegments,
-            potentialSquares, riskScore: riskScore + chainRisk, chainRisk,
-            defensiveValue, controlArea,
-            totalScore: squaresCompleted * 50 + defensiveValue - (riskScore + chainRisk * 2) + potentialSquares * 0.5
-        };
-        if (squaresCompleted > 0) {
-            winningMoves.push(move);
-        } else if (isUnsafe) {
-            unsafeMoves.push(move);
-        } else {
-            safeMoves.push(move);
-        }
-    }
-    
-    // 執行 AI 移動
+    /**
+     * 【保留】
+     * 執行 AI 移動 (由 Worker 觸發)
+     */
     function executeAIMove(dotA, dotB) {
         if (!isValidLine(dotA, dotB)) {
             console.warn("AI 嘗試繪製無效連線，已阻止");
@@ -989,10 +900,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sq.filled) totalFilledSquares++;
         });
         
-        drawCanvas();
+        if (!isBatchRunning) {
+            drawCanvas();
+        }
         updateUI();
 
-        // 【新增】紀錄這一步
         logMove(dotA, dotB, scoredThisTurn);
 
         if (totalFilledSquares === totalSquares) {
@@ -1001,23 +913,90 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (scoredThisTurn && scoreAndGo) {
-            checkAndTriggerAIMove();
+            checkAndTriggerAIMove(); // AI 得分，繼續
         } else {
             switchPlayer();
             if (gameMode === 'cvc') {
-                checkAndTriggerAIMove();
+                checkAndTriggerAIMove(); // CVC，換下一個 AI
             } else {
-                if (!isAnimating) {
+                if (!isAnimating && !isBatchRunning) { // PVC，換玩家
                     canvas.style.pointerEvents = 'auto';
                 }
             }
         }
     }
 
-    // --- 結束 AI 相關函式 ---
+    // --- 【新增】 批次處理函式 ---
+
+    function startBatchProcess() {
+        if (typeof JSZip === 'undefined') {
+            alert('錯誤：JSZip 庫未載入。無法執行批次處理。');
+            return;
+        }
+
+        const games = parseInt(batchGamesInput.value, 10);
+        if (isNaN(games) || games <= 0 || games > 1000) {
+            alert('請輸入有效的場次 (1 ~ 1000)。');
+            return;
+        }
+
+        isBatchRunning = true;
+        totalGamesToRun = games;
+        currentGameNumber = 1;
+        batchZip = new JSZip();
+
+        // 鎖定 UI
+        document.body.classList.add('batch-running');
+        batchStatus.classList.remove('hidden');
+        progressBarInner.style.width = '0%';
+        
+        // 確保遊戲結束畫面是隱藏的
+        gameOverMessage.classList.add('hidden');
+
+        // 開始第一場
+        initGame();
+    }
+
+    function stopBatchProcess(downloadPartial = false) {
+        isBatchRunning = false;
+        
+        // 解鎖 UI
+        document.body.classList.remove('batch-running');
+        batchStatus.classList.add('hidden');
+        progressBarInner.style.width = '0%';
+
+        if (downloadPartial && batchZip) {
+            console.log("下載部分結果...");
+            downloadBatchZip("partial-batch-results.zip");
+        }
+        
+        batchZip = null;
+        totalGamesToRun = 0;
+        currentGameNumber = 1;
+
+        // 重設遊戲到初始狀態
+        setTimeout(initGame, 100);
+    }
+
+    function downloadBatchZip(filename = "cvc-batch-results.zip") {
+        if (!batchZip) return;
+
+        batchZip.generateAsync({ type: "blob" })
+            .then(function(content) {
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(content);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            });
+    }
 
 
-    // 綁定所有事件
+    // --- 綁定所有事件 ---
     canvas.addEventListener('click', handleCanvasClick);
     canvas.addEventListener('touchstart', function(e) {
         e.preventDefault();
@@ -1025,9 +1004,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     resetButton.addEventListener('click', initGame);
-    exportPngButton.addEventListener('click', exportCanvasAsPNG);
-    // 【新增】匯出 CSV 事件
-    exportCsvButton.addEventListener('click', exportHistoryToCSV);
+    
+    // 【修改】
+    exportPngButton.addEventListener('click', downloadPNG);
+    exportCsvButton.addEventListener('click', downloadCSV);
     
     confirmLineButton.addEventListener('click', confirmLine);
     cancelLineButton.addEventListener('click', cancelLine);
@@ -1048,6 +1028,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scoreAgainModeSelect) {
         scoreAgainModeSelect.addEventListener('change', initGame);
     }
+
+    // 【新增】 批次處理事件
+    startBatchButton.addEventListener('click', startBatchProcess);
+    stopBatchButton.addEventListener('click', () => {
+        if (confirm('您確定要停止批次處理嗎？目前已完成的結果將會被打包下載。')) {
+            stopBatchProcess(true); // true = 下載部分結果
+        }
+    });
 
     // 啟動遊戲
     initGame();
