@@ -673,6 +673,8 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * 【已修改】
      * 觸發 AI 運算，並顯示「運算中」
+     * * 【*重要修正*】
+     * 傳遞 gridRows 和 gridCols 給 AI
      */
     function checkAndTriggerAIMove() {
         if ((gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) && !isGameOver() && !isAnimating) {
@@ -694,7 +696,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 lines: JSON.parse(JSON.stringify(lines)),
                 squares: JSON.parse(JSON.stringify(squares)),
                 scores: { ...scores },
-                currentPlayer: currentPlayer
+                currentPlayer: currentPlayer,
+                // 【！！已修改！！】 傳遞棋盤尺寸
+                gridRows: gridRows,
+                gridCols: gridCols
             };
             
             const settings = {
