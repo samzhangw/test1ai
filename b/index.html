@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>點格棋盤遊戲</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="main-container">
+
+        <div id="game-column">
+            
+            <header>
+                <h1>點格棋盤</h1>
+                <p class="subtitle">經典策略遊戲，挑戰您的智慧</p>
+            </header>
+
+            <div id="canvas-container">
+                <canvas id="game-canvas"></canvas>
+
+                <div id="game-over-message" class="hidden">
+                    <span id="winner-text"></span>
+                </div>
+            </div>
+
+            <div id="action-bar" class="hidden">
+                <button id="confirm-line-button" class="btn primary">確認連線</button>
+                <button id="cancel-line-button" class="btn danger">取消選取</button>
+            </div>
+        </div>
+
+        <div id="controls-column">
+
+            <div id="status-bar" class="control-card">
+                <div id="player1-score" class="score-box active">
+                    玩家 1: <span id="score1">0</span>
+                </div>
+                <div id="player2-score" class="score-box">
+                    玩家 2: <span id="score2">0</span>
+                </div>
+            </div>
+
+            <div id="game-controls" class="control-card">
+                <div class="control-section">
+                    <h3 class="section-title">遊戲設定</h3>
+                    
+                    <div class="settings-grid">
+                        <div id="game-mode-selector">
+                            <label for="game-mode">遊戲模式</label>
+                            <select id="game-mode">
+                                <option value="pvp">玩家 vs 玩家</option>
+                                <option value="pvc">玩家 vs 電腦</option>
+                                <option value="cvc">電腦 vs 電腦</option>
+                            </select>
+                        </div>
+                        <div id="board-size-selector">
+                            <label for="board-rows">列數</label>
+                            <input id="board-rows" type="number" min="2" max="12" value="4" />
+                            <span class="separator">×</span>
+                            <label for="board-cols">欄數</label>
+                            <input id="board-cols" type="number" min="2" max="12" value="4" />
+                        </div>
+                        <div id="line-length-selector">
+                            <label for="line-length">連線長度</label>
+                            <input id="line-length" type="number" min="1" max="10" value="1" />
+                        </div>
+                        <div id="score-again-selector">
+                            <label for="score-again-mode">得分後連線</label>
+                            <select id="score-again-mode">
+                                <option value="yes">是 (經典)</option>
+                                <option value="no" selected>否 (輪流)</option>
+                            </select>
+                        </div>
+                    </div> 
+
+                    <div class="button-group">
+                        <button id="reset-button" class="btn success">
+                            <span class="btn-icon">↻</span>
+                            重新開始
+                        </button>
+                        <button id="export-png-button" class="btn secondary">
+                            <span class="btn-icon">↓</span>
+                            匯出 PNG
+                        </button>
+                        <button id="export-csv-button" class="btn secondary">
+                            <span class="btn-icon">📄</span>
+                            匯出紀錄
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div> 
+
+    </div> 
+
+    <script src="script.js"></script>
+</body>
+</html>
