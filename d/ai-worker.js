@@ -9,6 +9,8 @@
  * 5. 靜態搜尋 (Quiescence Search) - 整合於啟發函數中
  * 6. 支援「得分後再走一步」的 Minimax
  * 7. (**** 新功能 ****) 策略隨機性 (在多個最佳解中隨機選取)
+ * * 【已修改】
+ * 8. 支援 maxLineLength > 1 的啟發式搜尋
  * ============================================
  */
 
@@ -20,6 +22,11 @@ let playerAINumber;
 let playerOpponentNumber;
 let scoreAndGoRule = true;
 let maxLineLength = 1;
+
+// 【新增】棋盤尺寸與點
+let gridRows;
+let gridCols;
+let aiDots = [];
 
 // AI 效能與快取
 let transpositionTable = new Map();
@@ -45,17 +52,33 @@ self.onmessage = function (e) {
     playerOpponentNumber = (playerAINumber === 1) ? 2 : 1;
     scoreAndGoRule = settings.scoreAndGo;
     maxLineLength = settings.maxLineLength;
+    
+    // 【新增】取得棋盤尺寸並產生 aiDots
+    gridRows = gameState.gridRows;
+    gridCols = gameState.gridCols;
+    aiDots = [];
+    for (let r = 0; r < gridRows; r++) {
+        aiDots[r] = [];
+        for (let c = 0; c < gridCols; c++) {
+            aiDots[r][c] = { r: r, c: c };
+        }
+    }
+
     transpositionTable.clear(); 
     ttHits = 0;
 
     // 2. 決定 AI 策略
-    const availableMoves = getAvailableMoves();
+    // 【修改】
+    const availableMoves = getAvailableMoves(); // 參數現在是全域的
+    
     let bestMove;
 
     if (maxLineLength > 1 || availableMoves.length > 24) {
-        bestMove = findBestMoveHeuristic(availableMoves);
+        // 【修改】
+        bestMove = findBestMoveHeuristic(availableMoves); // 參數現在是全域的
     } else {
-        bestMove = findBestMoveMinimaxIterative(availableMoves);
+        // 【修改】
+        bestMove = findBestMoveMinimaxIterative(availableMoves); // 參數現在是全域的
     }
     
     // 3. 傳回找到的最佳移動
@@ -70,8 +93,12 @@ self.onmessage = function (e) {
     }
 };
 
-// --- 策略 1: 淺層啟發式搜尋 (1-ply) ---
-function findBestMoveHeuristic(availableMoves) {
+/**
+ * 【已修改】
+ * 策略 1: 淺層啟發式搜尋 (1-ply)
+ * - 現在接收 {dotA, dotB, segments} 格式的 moves
+ */
+function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = aiSquares) {
     if (availableMoves.length === 0) return null;
     
     let winningMoves = [];
@@ -79,25 +106,44 @@ function findBestMoveHeuristic(availableMoves) {
     let minorUnsafeMoves = [];
     let criticalUnsafeMoves = [];
     
-    // 【修改】: 啟發式搜尋也需要隨機性
-    
-    // 1. 評估所有移動
+    // 1. 評估所有 "dot-pair" 移動
     for (const move of availableMoves) {
         let squaresCompleted = 0;
-        let isCritical = false;
-        let isMinor = false;
+        let isCritical = false; // 會製造出 3 邊
+        let isMinor = false;    // 會製造出 2 邊
         
-        const adjacentSquares = getAdjacentSquares(move.id);
-        
-        for (const sq of adjacentSquares) {
+        let uniqueAdjacentSquares = new Set();
+
+        // 檢查此 move 包含的所有 1-length segments
+        for (const segment of move.segments) {
+            const adjacentSquares = getAdjacentSquares(segment.id, squaresObj);
+            adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
+        }
+
+        for (const sq of uniqueAdjacentSquares) {
             if (sq.filled) continue;
-            const sides = getSidesDrawn(sq); 
-            if (sides === 3) { squaresCompleted++; }
-            else if (sides === 2) { isCritical = true; }
-            else if (sides === 1) { isMinor = true; }
+            
+            // 模擬畫上 *所有* segments 後的狀態
+            let sidesAfterMove = 0;
+            sq.lineKeys.forEach(key => {
+                if (linesObj[key].players.length > 0) {
+                    sidesAfterMove++;
+                } else if (move.segments.some(seg => seg.id === key)) {
+                    // 這是此 move 會畫上的線
+                    sidesAfterMove++;
+                }
+            });
+
+            if (sidesAfterMove === 4) {
+                squaresCompleted++;
+            } else if (sidesAfterMove === 3) {
+                isCritical = true;
+            } else if (sidesAfterMove === 2) {
+                isMinor = true;
+            }
         }
         
-        const moveInfo = { segment: move, squaresCompleted, isCritical, isMinor };
+        const moveInfo = { move, squaresCompleted, isCritical, isMinor };
         
         if (squaresCompleted > 0) winningMoves.push(moveInfo);
         else if (isCritical) criticalUnsafeMoves.push(moveInfo);
@@ -105,44 +151,35 @@ function findBestMoveHeuristic(availableMoves) {
         else safeMoves.push(moveInfo);
     }
     
-    let segmentToDraw;
+    let bestDotMove;
     
     // 2. 根據優先級選擇
     if (winningMoves.length > 0) {
         // 選能拿最多分的
         const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
         const bestWinningMoves = winningMoves.filter(m => m.squaresCompleted === maxScore);
-        segmentToDraw = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].segment;
+        bestDotMove = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].move;
 
     } else if (safeMoves.length > 0) {
         // 隨機選一個安全的
-        segmentToDraw = safeMoves[Math.floor(Math.random() * safeMoves.length)].segment;
+        bestDotMove = safeMoves[Math.floor(Math.random() * safeMoves.length)].move;
         
     } else if (minorUnsafeMoves.length > 0) {
         // 隨機選一個次要風險的
-        segmentToDraw = minorUnsafeMoves[Math.floor(Math.random() * minorUnsafeMoves.length)].segment;
+        bestDotMove = minorUnsafeMoves[Math.floor(Math.random() * minorUnsafeMoves.length)].move;
         
     } else if (criticalUnsafeMoves.length > 0) {
-        // 找出導致最短連鎖的犧牲
-        let bestSacrifices = [];
-        let minChain = Infinity;
-        for (const move of criticalUnsafeMoves) {
-            const chainLength = calculateChainReaction(move.segment, aiLines, aiSquares);
-            if (chainLength < minChain) {
-                minChain = chainLength;
-                bestSacrifices = [move.segment];
-            } else if (chainLength === minChain) {
-                bestSacrifices.push(move.segment);
-            }
-        }
-        segmentToDraw = bestSacrifices[Math.floor(Math.random() * bestSacrifices.length)];
+        // 【簡化】: 多格連線的連鎖計算太複雜，暫時先隨機選一個
+        bestDotMove = criticalUnsafeMoves[Math.floor(Math.random() * criticalUnsafeMoves.length)].move;
         
+    } else if (availableMoves.length > 0) {
+        bestDotMove = availableMoves[0];
     } else {
-        segmentToDraw = availableMoves[0];
+        return null; // 真的沒地方走了
     }
 
-    if (!segmentToDraw) return null;
-    return { dotA: segmentToDraw.p1, dotB: segmentToDraw.p2 };
+    if (!bestDotMove) return null;
+    return { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB };
 }
 
 // --- 【已修改】策略 2: Minimax (迭代加深版) ---
@@ -240,7 +277,8 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
     }
 
     // 2. 終止
-    const availableMoves = getAvailableMoves(linesState);
+    // 【修改】
+    const availableMoves = getAvailableMoves(linesState); // 這裡因為 depth > 0 且 maxLineLength=1, 會自動取得 1-length segments
     if (depth === 0 || availableMoves.length === 0) {
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
@@ -344,11 +382,49 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
 
 // --- 遊戲狀態模擬函式 (Worker 內部) ---
 
-function getAvailableMoves(linesObj = aiLines) {
+/**
+ * 【已修改】
+ * 根據 maxLineLength 產生可行的移動
+ * - 如果 maxLineLength === 1, 傳回 1-length segments (Minimax 策略用)
+ * - 如果 maxLineLength > 1, 傳回 {dotA, dotB} 物件 (Heuristic 策略用)
+ */
+function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
     const moves = [];
-    for (const id in linesObj) {
-        if (linesObj[id].players.length === 0) {
-            moves.push(linesObj[id]);
+    
+    if (lineLength === 1) {
+        // Minimax 策略: 傳回 1-length segments (舊有邏輯)
+        for (const id in linesObj) {
+            if (linesObj[id].players.length === 0) {
+                moves.push(linesObj[id]);
+            }
+        }
+        
+    } else {
+        // Heuristic 策略: 傳回 {dotA, dotB, segments}
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const dotA = dots[r][c];
+
+                // 1. 檢查水平 (往右)
+                if (c + lineLength < cols) {
+                    const dotB = dots[r][c + lineLength];
+                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                    // 檢查是否至少有一條線是新的
+                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                        moves.push({ dotA, dotB, segments });
+                    }
+                }
+                
+                // 2. 檢查垂直 (往下)
+                if (r + lineLength < rows) {
+                    const dotB = dots[r + lineLength][c];
+                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                    // 檢查是否至少有一條線是新的
+                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                        moves.push({ dotA, dotB, segments });
+                    }
+                }
+            }
         }
     }
     return moves;
@@ -424,6 +500,43 @@ function undoMove(segment, undoData, linesState, squaresState, scoresState) {
         }
     }
 }
+
+/**
+ * 【新增】
+ * (複製自 script.js)
+ * 取得 dotA 和 dotB 之間的所有 1-length 線段
+ */
+function getSegmentsForLine(dotA, dotB, linesObj = aiLines) {
+    const segments = [];
+    const dr = Math.sign(dotB.r - dotA.r);
+    const dc = Math.sign(dotB.c - dotA.c);
+    let r = dotA.r;
+    let c = dotA.c;
+    
+    if (dr !== 0 && dc !== 0) {
+        return [];
+    }
+
+    while (r !== dotB.r || c !== dotB.c) {
+        let next_r = r + dr;
+        let next_c = c + dc;
+        let segmentId = null;
+
+        if (dr === 0) { // 水平
+            segmentId = `H_${r},${Math.min(c, next_c)}`;
+        } else if (dc === 0) { // 垂直
+            segmentId = `V_${Math.min(r, next_r)},${c}`;
+        }
+
+        if (segmentId && linesObj[segmentId]) {
+            segments.push(linesObj[segmentId]);
+        }
+        r = next_r;
+        c = next_c;
+    }
+    return segments;
+}
+
 
 // 深度複製
 function deepCopy(obj) {
