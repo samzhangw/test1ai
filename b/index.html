@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -24,6 +26,11 @@
 
             <div id="canvas-container">
                 <canvas id="game-canvas"></canvas>
+
+                <div id="ai-thinking-indicator" class="hidden">
+                    <div class="spinner"></div>
+                    <p>電腦運算中...</p>
+                </div>
 
                 <div id="game-over-message" class="hidden">
                     <span id="winner-text"></span>
@@ -95,7 +102,27 @@
                         </button>
                     </div>
                 </div>
-            </div>
+
+                <div class="control-section">
+                    <h3 class="section-title">批次 CVC 對戰</h3>
+                    
+                    <div id="batch-controls">
+                        <div class="batch-input-group">
+                            <label for="batch-games-input">對戰場次</label>
+                            <input id="batch-games-input" type="number" min="1" max="1000" value="10" />
+                        </div>
+                        <button id="start-batch-button" class="btn primary">開始批次</button>
+                        <button id="stop-batch-button" class="btn danger hidden">強制停止</button>
+                    </div>
+
+                    <div id="batch-status" class="hidden">
+                        <p>處理中...</p>
+                        <div class="progress-bar">
+                            <div id="progress-bar-inner"></div>
+                        </div>
+                    </div>
+                </div>
+                </div>
         </div> 
 
     </div> 
