@@ -385,9 +385,10 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
 
 
 /**
- * 【重構 7】
+ * 【重構 7 & 最終優化】
  * Minimax 輔助函式 (排序)
  * - 'moves' 是一個 { dotA, dotB, segments } 陣列
+ * - 強制提高得分機會的優先級
  */
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { // move is { dotA, dotB, segments }
@@ -421,7 +422,7 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
             
             const sidesAfterMove = sidesBeforeMove + segmentsThisMoveDraws;
 
-            if (sidesAfterMove === 4) priority += 100; // 得分 = 高優先
+            if (sidesAfterMove === 4) priority += 10000; // 【最終優化】得分 = 極高優先
             else if (sidesAfterMove === 3) priority -= 100; // 製造 3 邊 = 低優先
             else if (sidesAfterMove === 2) priority -= 10; // 製造 2 邊 = 稍低優先
             else priority += 1; // 安全
