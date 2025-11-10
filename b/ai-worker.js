@@ -335,8 +335,9 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
 }
 
 /**
+ * 【Score-Go 修正 3】
  * 啟發式評估函式 (Heuristic Evaluation)
- * (此函式不變)
+ * - 3 邊格是「獎勵」，不是「懲罰」
  */
 function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     const myScore = isMaxPlayer ? scoresState[playerAINumber] : scoresState[playerOpponentNumber];
@@ -355,7 +356,8 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
         if (sq.filled) continue;
         const sides = getSidesDrawn(sq, linesState);
         if (sides === 3) {
-            heuristicScore -= HEURISTIC_CRITICAL_MOVE_PENALTY;
+            // 【Score-Go 修正 3】: 3 邊格是得分機會，應為「獎勵」
+            heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; // (原為 -=)
             const criticalLineId = sq.lineKeys.find(key => linesState[key].players.length === 0);
             if (criticalLineId) criticalUnsafeMoves.push(criticalLineId);
         } else if (sides === 2) {
