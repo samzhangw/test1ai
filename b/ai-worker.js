@@ -96,7 +96,7 @@ self.onmessage = function (e) {
 /**
  * 【已修改】
  * 策略 1: 淺層啟發式搜尋 (1-ply)
- * - 現在接收 {dotA, dotB, segments} 格式的 moves
+ * - 現在接收 {dotA, dotB, segments} 或 {p1, p2, id} (segment) 格式的 moves
  */
 function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = aiSquares) {
     if (availableMoves.length === 0) return null;
@@ -106,16 +106,25 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     let minorUnsafeMoves = [];
     let criticalUnsafeMoves = [];
     
-    // 1. 評估所有 "dot-pair" 移動
+    // 1. 評估所有 "dot-pair" 或 "segment" 移動
     for (const move of availableMoves) {
         let squaresCompleted = 0;
         let isCritical = false; // 會製造出 3 邊
         let isMinor = false;    // 會製造出 2 邊
         
         let uniqueAdjacentSquares = new Set();
+        let segmentsInThisMove; // 儲存此移動包含的所有 1-length segments
+
+        if (move.segments) {
+            // 格式: { dotA, dotB, segments: [...] } (maxLineLength > 1)
+            segmentsInThisMove = move.segments;
+        } else {
+            // 格式: { p1, p2, id, players } (maxLineLength = 1)
+            segmentsInThisMove = [move]; 
+        }
 
         // 檢查此 move 包含的所有 1-length segments
-        for (const segment of move.segments) {
+        for (const segment of segmentsInThisMove) {
             const adjacentSquares = getAdjacentSquares(segment.id, squaresObj);
             adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
         }
@@ -128,7 +137,7 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
             sq.lineKeys.forEach(key => {
                 if (linesObj[key].players.length > 0) {
                     sidesAfterMove++;
-                } else if (move.segments.some(seg => seg.id === key)) {
+                } else if (segmentsInThisMove.some(seg => seg.id === key)) {
                     // 這是此 move 會畫上的線
                     sidesAfterMove++;
                 }
@@ -151,36 +160,45 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
         else safeMoves.push(moveInfo);
     }
     
-    let bestDotMove;
+    let bestChosenMove; // 這是 'move' 物件
     
     // 2. 根據優先級選擇
     if (winningMoves.length > 0) {
         // 選能拿最多分的
         const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
         const bestWinningMoves = winningMoves.filter(m => m.squaresCompleted === maxScore);
-        bestDotMove = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].move;
+        bestChosenMove = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].move;
 
     } else if (safeMoves.length > 0) {
         // 隨機選一個安全的
-        bestDotMove = safeMoves[Math.floor(Math.random() * safeMoves.length)].move;
+        bestChosenMove = safeMoves[Math.floor(Math.random() * safeMoves.length)].move;
         
     } else if (minorUnsafeMoves.length > 0) {
         // 隨機選一個次要風險的
-        bestDotMove = minorUnsafeMoves[Math.floor(Math.random() * minorUnsafeMoves.length)].move;
+        bestChosenMove = minorUnsafeMoves[Math.floor(Math.random() * minorUnsafeMoves.length)].move;
         
     } else if (criticalUnsafeMoves.length > 0) {
         // 【簡化】: 多格連線的連鎖計算太複雜，暫時先隨機選一個
-        bestDotMove = criticalUnsafeMoves[Math.floor(Math.random() * criticalUnsafeMoves.length)].move;
+        bestChosenMove = criticalUnsafeMoves[Math.floor(Math.random() * criticalUnsafeMoves.length)].move;
         
     } else if (availableMoves.length > 0) {
-        bestDotMove = availableMoves[0];
+        bestChosenMove = availableMoves[0];
     } else {
         return null; // 真的沒地方走了
     }
 
-    if (!bestDotMove) return null;
-    return { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB };
+    if (!bestChosenMove) return null;
+    
+    // 3. 根據 'move' 物件的格式傳回 {dotA, dotB}
+    if (bestChosenMove.dotA) {
+        // 格式: { dotA, dotB, segments }
+        return { dotA: bestChosenMove.dotA, dotB: bestChosenMove.dotB };
+    } else {
+        // 格式: { p1, p2, id, ... }
+        return { dotA: bestChosenMove.p1, dotB: bestChosenMove.p2 };
+    }
 }
+
 
 // --- 【已修改】策略 2: Minimax (迭代加深版) ---
 function findBestMoveMinimaxIterative(availableMoves) {
