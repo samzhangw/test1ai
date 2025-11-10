@@ -385,10 +385,10 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
 
 
 /**
- * 【重構 7 & 最終優化】
+ * 【最終修正】
  * Minimax 輔助函式 (排序)
  * - 'moves' 是一個 { dotA, dotB, segments } 陣列
- * - 強制提高得分機會的優先級
+ * - 修正排序邏輯，確保正確評估得分
  */
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { // move is { dotA, dotB, segments }
@@ -405,27 +405,30 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
         for (const sq of uniqueAdjacentSquares) {
             if (sq.filled) continue;
             
-            // 計算移動 *前* 的邊數
-            let sidesBeforeMove = 0;
+            // 【修正邏輯】: 我們必須檢查這個方格在移動後的*真實*邊數
+            
+            let sidesAfterMove = 0;
             sq.lineKeys.forEach(key => {
-                if (linesState[key].players.length > 0) sidesBeforeMove++;
-            });
-
-            // 計算這個 move 會畫上幾條邊
-            let segmentsThisMoveDraws = 0;
-            sq.lineKeys.forEach(key => {
-                // 檢查 'move' 物件裡的 'segments' 陣列是否包含這條 key
-                if (move.segments.some(seg => seg.id === key)) {
-                    segmentsThisMoveDraws++;
+                // 檢查是否是「已存在的邊」
+                if (linesState[key].players.length > 0) {
+                    sidesAfterMove++;
+                } 
+                // 檢查是否是「這次移動會畫上的邊」
+                else if (move.segments.some(seg => seg.id === key)) {
+                    sidesAfterMove++;
                 }
             });
             
-            const sidesAfterMove = sidesBeforeMove + segmentsThisMoveDraws;
-
-            if (sidesAfterMove === 4) priority += 10000; // 【最終優化】得分 = 極高優先
-            else if (sidesAfterMove === 3) priority -= 100; // 製造 3 邊 = 低優先
-            else if (sidesAfterMove === 2) priority -= 10; // 製造 2 邊 = 稍低優先
-            else priority += 1; // 安全
+            // 根據移動*後*的真實狀態來賦予優先級
+            if (sidesAfterMove === 4) {
+                priority += 10000; // 得分 = 極高優先
+            } else if (sidesAfterMove === 3) {
+                priority -= 100; // 製造 3 邊 = 低優先
+            } else if (sidesAfterMove === 2) {
+                priority -= 10; // 製造 2 邊 = 稍低優先
+            } else {
+                priority += 1; // 安全
+            }
         }
         
         // 優先選擇「全新」的線 (沒有重疊對手或自己的線)
