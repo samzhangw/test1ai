@@ -153,10 +153,55 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     
     // 2. 根據優先級選擇
     if (winningMoves.length > 0) {
-        // 選能拿最多分的
-        const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
-        const bestWinningMoves = winningMoves.filter(m => m.squaresCompleted === maxScore);
-        bestDotMove = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].move;
+        // 【策略修改】:
+        // 為了「經典模式」，我們不只看當下得分 (squaresCompleted)，
+        // 我們要計算此移動能引發的「總連鎖長度 (Total Chain)」。
+        
+        let bestChainLength = -1;
+        let bestWinningMovesList = []; // 儲存 { move, chainLength }
+
+        for (const moveInfo of winningMoves) {
+            const move = moveInfo.move; // { dotA, dotB, segments }
+            
+            // 1. 找出這個 winning move 中的 "關鍵線段"
+            // (即 segments 陣列中，尚未被畫過的線段)
+            // 為了簡化，我們假設第一個找到的 "新線段" 是觸發連鎖的起點
+            // (這在 lineLength = 1 時是 100% 準確的)
+            const startingSegment = move.segments.find(seg => linesObj[seg.id].players.length === 0);
+
+            let currentChainLength = 0;
+
+            if (startingSegment) {
+                // 2. 呼叫現有的 calculateChainReaction (在檔案末尾) 來模擬連鎖
+                // (注意: calculateChainReaction 會*包含*第一個得分的格子)
+                currentChainLength = calculateChainReaction(startingSegment, linesObj, squaresObj);
+            }
+
+            // 3. Fallback: 如果 calculateChainReaction 失敗 (e.g., 找不到 startingSegment)
+            // 至少使用它當下能得分的格子數 (來自 heuristic 稍早的評估)
+            if (currentChainLength <= 0) {
+                currentChainLength = moveInfo.squaresCompleted;
+            }
+
+            bestWinningMovesList.push({ move: moveInfo.move, chainLength: currentChainLength });
+            
+            // 4. 比較並儲存最佳連鎖
+            if (currentChainLength > bestChainLength) {
+                bestChainLength = currentChainLength;
+            }
+        }
+        
+        // 5. 從所有 "最佳" (最長連鎖) 的移動中，隨機選一個
+        const allBestMoves = bestWinningMovesList
+            .filter(m => m.chainLength === bestChainLength)
+            .map(m => m.move); // m.move 是 { dotA, dotB, segments }
+
+        if (allBestMoves.length > 0) {
+            bestDotMove = allBestMoves[Math.floor(Math.random() * allBestMoves.length)];
+        } else {
+            // 再次 Fallback (理論上不應發生)
+            bestDotMove = winningMoves[0].move;
+        }
 
     } else if (safeMoves.length > 0) {
         // 隨機選一個安全的
