@@ -626,9 +626,11 @@ function deepCopy(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
 
-// (來自 script.js) 的連鎖計算函式
+/**
+ * 【連鎖反應修正】
+ * (來自 script.js) 的連鎖計算函式
+ */
 function calculateChainReaction(aiSacrificeSegment, linesState, squaresState) {
-    // (此函式不變)
     let totalChainLength = 0;
     const simulatedDrawnLines = new Set();
     simulatedDrawnLines.add(aiSacrificeSegment.id);
@@ -641,7 +643,9 @@ function calculateChainReaction(aiSacrificeSegment, linesState, squaresState) {
         sq.lineKeys.forEach(key => {
             if (linesState[key].players.length > 0) sidesDrawn++;
         });
-        if (sidesDrawn === 2) {
+        
+        // 【連鎖反應修正】: 連鎖反應的起點是 3 邊格，不是 2 邊格
+        if (sidesDrawn === 3) {
             startingBoxes.push(sq);
         }
     }
