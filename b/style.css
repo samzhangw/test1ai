@@ -1,46 +1,45 @@
-/* --- 【全新主題】復古霓虹電玩 (Retro Neon Arcade) --- */
-@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Press+Start+2P&display=swap');
+/* --- 【全新主題】清新自然 (Fresh & Natural) --- */
 
 /* --- CSS 變數 --- */
 :root {
     /* 字型 */
-    --font-main: 'Oxanium', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-display: 'Press Start 2P', var(--font-main);
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     
-    /* 基礎顏色 (暗黑模式) */
-    --color-bg: #0d0c22; /* 深靛藍背景 */
-    --color-card-bg: rgba(23, 21, 58, 0.85); /* 半透明卡片背景 */
-    --color-text: #e0e0ff; /* 亮紫色文字 */
-    --color-text-light: #9a98d9; /* 淡紫色文字 */
-    --color-border: #4a478a; /* 霓虹邊框基色 */
-
-    /* 玩家顏色 (霓虹) */
-    --p1-color: #00f0ff; /* 霓虹青色 */
-    --p1-bg: rgba(0, 240, 255, 0.1);
-    --p1-glow: rgba(0, 240, 255, 0.5);
+    /* 基礎顏色 (柔和亮色) */
+    --color-bg: #f8f9f5; /* 極淺的米白/灰綠色 */
+    --color-card-bg: #ffffff;
+    --color-text: #2a2e2a; /* 深橄欖灰 */
+    --color-text-light: #6b706b; /* 灰 */
+    --color-border: #e4e6e2; /* 淺灰邊框 */
     
-    --p2-color: #ff00ff; /* 霓虹洋紅 */
-    --p2-bg: rgba(255, 0, 255, 0.1);
-    --p2-glow: rgba(255, 0, 255, 0.5);
+    /* 玩家顏色 (自然色) */
+    --p1-color: #3a866f; /* 鼠尾草綠 */
+    --p1-bg: #f0f7f5;
+    --p1-glow: rgba(58, 134, 111, 0.2);
+    
+    --p2-color: #c45d3c; /* 陶土紅 */
+    --p2-bg: #fcf2ef;
+    --p2-glow: rgba(196, 93, 60, 0.2);
 
     /* 按鈕顏色 */
-    --btn-success: #00ff00; /* 霓虹綠 */
-    --btn-success-hover: #33ff33;
-    --btn-danger: #ff0000; /* 霓虹紅 */
-    --btn-danger-hover: #ff3333;
-    --btn-secondary: #718096;
-    --btn-secondary-hover: #a0aec0;
+    --btn-success: #3a866f; /* 同 P1 */
+    --btn-success-hover: #2e6b59;
+    --btn-danger: #c45d3c; /* 同 P2 */
+    --btn-danger-hover: #a94e31;
+    --btn-secondary: #e4e6e2; /* 淺灰底 */
+    --btn-secondary-hover: #d8dbd6;
+    --btn-secondary-text: #4a4e4a;
 
-    /* 陰影 (改為發光效果) */
-    --shadow-sm: 0 0 4px var(--p1-glow);
-    --shadow-md: 0 0 10px var(--p1-glow);
-    --shadow-lg: 0 0 20px var(--p1-glow);
+    /* 陰影 (更柔和) */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 25px -10px rgba(0, 0, 0, 0.07);
     
-    /* 圓角 */
-    --border-radius-sm: 0.25rem;
-    --border-radius-md: 0.375rem;
-    --border-radius-lg: 0.5rem;
-    --border-radius-xl: 0.75rem;
+    /* 圓角 (更圓潤) */
+    --border-radius-sm: 0.375rem;
+    --border-radius-md: 0.75rem;
+    --border-radius-lg: 1rem;
+    --border-radius-xl: 1.25rem;
 }
 
 /* --- 基礎樣式 --- */
@@ -60,13 +59,6 @@ body {
     justify-content: center;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-
-    /* 【新增】背景網格特效 */
-    background-image: 
-        linear-gradient(var(--color-border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
-    background-size: 50px 50px;
-    background-position: -1px -1px;
 }
 
 /* --- 主佈局：雙欄容器 --- */
@@ -92,44 +84,39 @@ header {
 }
 
 h1 {
-    font-family: var(--font-display); /* 【修改】使用電玩字型 */
-    font-size: 2.2rem;
-    font-weight: 400; /* 像素字體不需要粗體 */
-    color: #fff;
-    margin: 0 0 10px 0;
-    /* 【新增】霓虹文字特效 */
-    text-shadow: 0 0 5px #fff, 0 0 10px var(--p1-color), 0 0 15px var(--p1-color);
+    font-size: 2.75rem; /* 【修改】字體更突出 */
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0 0 4px 0;
+    letter-spacing: -1px; /* 【新增】 */
 }
 
 .subtitle {
     font-size: 1.1rem;
     color: var(--color-text-light);
     margin: 0;
-    font-weight: 500;
+    font-weight: 400; /* 【修改】 */
 }
 
 /* 畫布容器（卡片樣式） */
 #canvas-container {
     position: relative;
     width: 100%;
-    background: var(--color-card-bg); /* 【修改】半透明背景 */
-    border-radius: var(--border-radius-xl);
-    border: 2px solid var(--p1-color); /* 【修改】霓虹邊框 */
+    background: var(--color-card-bg);
+    border-radius: var(--border-radius-xl); /* 【修改】更圓 */
+    box-shadow: var(--shadow-lg); /* 【修改】柔和陰影 */
+    border: 1px solid var(--color-border);
     padding: 20px;
     overflow: hidden;
-    /* 【新增】霓虹發光效果 */
-    box-shadow: 0 0 15px var(--p1-glow), inset 0 0 10px var(--p1-glow);
-    backdrop-filter: blur(5px); /* 【新增】毛玻璃效果 */
 }
 
 canvas {
     display: block;
     width: 100%;
     height: auto;
-    background-color: var(--color-bg); /* 【修改】畫布背景改為深色 */
+    background-color: #fff;
     cursor: pointer;
     border-radius: var(--border-radius-md);
-    border: 1px solid var(--color-border);
 }
 
 /* --- 右欄：資訊區 --- */
@@ -142,20 +129,12 @@ canvas {
 }
 
 .control-card {
-    background: var(--color-card-bg); /* 【修改】半透明背景 */
-    border-radius: var(--border-radius-lg);
-    border: 1px solid var(--color-border); /* 【修改】邊框顏色 */
+    background: var(--color-card-bg);
+    border-radius: var(--border-radius-lg); /* 【修改】更圓 */
+    box-shadow: var(--shadow-md); /* 【修改】柔和陰影 */
+    border: 1px solid var(--color-border);
     padding: 25px;
-    /* 【新增】霓虹發光效果 */
-    box-shadow: 0 0 8px rgba(0,0,0,0.4);
-    backdrop-filter: blur(5px); /* 【新增】毛玻璃效果 */
-    transition: all 0.3s ease;
 }
-.control-card:hover {
-    box-shadow: 0 0 12px var(--p2-glow);
-    border-color: var(--p2-color);
-}
-
 
 /* --- 計分板 --- */
 #status-bar {
@@ -166,50 +145,37 @@ canvas {
 
 .score-box {
     font-size: 1.1em;
-    font-weight: 600;
+    font-weight: 500; /* 【修改】 */
     padding: 15px;
     border-radius: var(--border-radius-md);
     color: var(--color-text-light);
     border: 2px solid transparent;
-    background-color: rgba(0,0,0,0.2); /* 【修改】更暗的背景 */
+    background-color: var(--color-bg);
     text-align: center;
     transition: all 0.3s ease;
 }
 
 .score-box span {
-    font-size: 1.3em;
+    font-size: 1.5em; /* 【修改】分數更突出 */
     font-weight: 700;
     display: block;
     margin-top: 5px;
 }
 
-@keyframes activeGlowP1 {
-    0% { box-shadow: 0 0 2px var(--p1-glow); }
-    50% { box-shadow: 0 0 10px var(--p1-glow), inset 0 0 5px var(--p1-glow); }
-    100% { box-shadow: 0 0 2px var(--p1-glow); }
-}
-@keyframes activeGlowP2 {
-    0% { box-shadow: 0 0 2px var(--p2-glow); }
-    50% { box-shadow: 0 0 10px var(--p2-glow), inset 0 0 5px var(--p2-glow); }
-    100% { box-shadow: 0 0 2px var(--p2-glow); }
-}
-
+/* 【修改】移除動畫，改用柔和的陰影和邊框 */
 .score-box.active {
     border-color: var(--p1-color);
     color: var(--p1-color);
     background-color: var(--p1-bg);
     transform: scale(1.02);
-    animation: activeGlowP1 1.5s infinite;
-    /* 【新增】文字發光 */
-    text-shadow: 0 0 5px var(--p1-color);
+    box-shadow: 0 0 15px var(--p1-glow);
 }
 
 .score-box.player2.active {
     border-color: var(--p2-color);
     color: var(--p2-color);
     background-color: var(--p2-bg);
-    animation-name: activeGlowP2;
-    text-shadow: 0 0 5px var(--p2-color);
+    box-shadow: 0 0 15px var(--p2-glow);
 }
 
 /* --- 遊戲設定區 --- */
@@ -224,14 +190,12 @@ canvas {
 }
 
 .section-title {
-    font-family: var(--font-display); /* 【修改】使用電玩字型 */
-    font-size: 1.1rem;
-    font-weight: 400;
-    color: var(--p2-color); /* 【修改】使用 P2 顏色 */
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
     margin: 0;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--color-border);
-    text-shadow: 0 0 5px var(--p2-glow); /* 【新增】文字發光 */
 }
 .control-section:not(:first-child) .section-title {
     padding-top: 10px;
@@ -240,13 +204,12 @@ canvas {
     border-top: 1px solid var(--color-border);
 }
 
+/* ... (grid layout selectors remain the same) ... */
 .settings-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 18px;
 }
-
-/* ... (grid layout selectors remain the same) ... */
 #game-mode-selector,
 #board-size-selector,
 #line-length-selector,
@@ -302,11 +265,11 @@ input[type="number"],
 select {
     font-family: var(--font-main);
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 500; /* 【修改】 */
     padding: 12px 16px;
     border-radius: var(--border-radius-md);
     border: 1px solid var(--color-border);
-    background: rgba(0,0,0,0.2); /* 【修改】背景 */
+    background: var(--color-bg);
     color: var(--color-text);
     outline: none;
     transition: all 0.2s ease;
@@ -323,8 +286,7 @@ input[type=number]::-webkit-inner-spin-button {
 }
 select {
     appearance: none;
-    /* 【修改】下拉箭頭改為亮色 */
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0ff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13.8-6.1H19.2c-7.5%200-13.8%204-16.3%2010.5-2.5%206.5-.5%2013.7%205.1%2018.1l128.5%20120.4c5.7%205.3%2013.7%208.2%2022%208.2s16.3-2.9%2022-8.2l128.5-120.4c5.6-4.4%207.6-11.6%205.1-18.1z%22%2F%3E%3C%2Fsvg%3E');
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23718096%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13.8-6.1H19.2c-7.5%200-13.8%204-16.3%2010.5-2.5%206.5-.5%2013.7%205.1%2018.1l128.5%20120.4c5.7%205.3%2013.7%208.2%2022%208.2s16.3-2.9%2022-8.2l128.5-120.4c5.6-4.4%207.6-11.6%205.1-18.1z%22%2F%3E%3C%2Fsvg%3E');
     background-repeat: no-repeat;
     background-position: right 16px center;
     background-size: 10px;
@@ -334,7 +296,7 @@ input[type="number"]:focus,
 select:focus {
     border-color: var(--p1-color);
     background: var(--color-card-bg);
-    box-shadow: 0 0 0 3px var(--p1-glow); /* 【修改】發光效果 */
+    box-shadow: 0 0 0 3px var(--p1-glow); /* 【修改】柔和光暈 */
 }
 
 /* --- 按鈕樣式 --- */
@@ -343,7 +305,7 @@ select:focus {
     font-size: 1rem;
     font-weight: 700;
     padding: 14px 28px;
-    border: 2px solid transparent; /* 【修改】使用邊框 */
+    border: none;
     border-radius: var(--border-radius-md);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -353,17 +315,15 @@ select:focus {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    box-shadow: none; /* 【修改】移除陰影 */
-    text-transform: uppercase; /* 【新增】大寫 */
-    letter-spacing: 1px; /* 【新增】字距 */
+    box-shadow: var(--shadow-sm);
 }
 .btn:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-md); /* 【修改】懸停時發光 */
+    box-shadow: var(--shadow-md);
 }
 .btn:active {
-    transform: translateY(0px);
-    box-shadow: none;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 .btn-icon {
     font-size: 1.2em;
@@ -379,45 +339,33 @@ select:focus {
 
 .btn.primary { 
     background-color: var(--p1-color);
-    border-color: var(--p1-color);
-    color: #000; /* 【修改】深色文字 */
-    box-shadow: 0 0 8px var(--p1-glow);
+    color: #fff;
 }
 .btn.primary:hover {
-    background-color: var(--p1-color);
-    color: #000;
-    box-shadow: 0 0 15px var(--p1-glow);
+    background-color: var(--btn-success-hover); 
 }
 .btn.success { 
-    background-color: transparent;
-    border-color: var(--btn-success);
-    color: var(--btn-success);
+    background-color: var(--btn-success);
 }
 .btn.success:hover { 
-    background-color: var(--btn-success);
-    color: #000;
-    box-shadow: 0 0 10px var(--btn-success);
+    background-color: var(--btn-success-hover);
 }
 .btn.danger  { 
-    background-color: transparent; 
-    border-color: var(--btn-danger);
-    color: var(--btn-danger);
+    background-color: var(--btn-danger); 
 }
 .btn.danger:hover {
-    background-color: var(--btn-danger);
-    color: #fff;
-    box-shadow: 0 0 10px var(--btn-danger);
+    background-color: var(--btn-danger-hover);
 }
 
 .btn.secondary {
-    background-color: transparent;
-    border-color: var(--btn-secondary);
-    color: var(--btn-secondary);
+    background-color: var(--btn-secondary);
+    color: var(--btn-secondary-text); /* 【修改】 */
+    border: 1px solid var(--color-border);
+    box-shadow: none;
 }
 .btn.secondary:hover {
-    background-color: var(--btn-secondary);
-    color: #fff;
-    box-shadow: 0 0 10px var(--btn-secondary);
+    background-color: var(--btn-secondary-hover);
+    box-shadow: var(--shadow-sm);
 }
 
 
@@ -450,31 +398,28 @@ select:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(13, 12, 34, 0.95); /* 【修改】深色背景 */
+    background-color: rgba(255, 255, 255, 0.95); /* 【修改】白色 */
     backdrop-filter: blur(5px);
     z-index: 10;
     margin: 20px;
     border-radius: var(--border-radius-md);
     animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    
-    /* 【新增】霓虹邊框 */
-    border: 2px solid var(--p1-color);
-    box-shadow: 0 0 20px var(--p1-glow);
 }
 @keyframes scaleIn {
     from { transform: scale(0.8); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
 #winner-text {
-    font-family: var(--font-display); /* 【修改】使用電玩字型 */
-    font-size: 2em;
-    font-weight: 400;
+    font-size: 2.5em;
+    font-weight: 800;
     color: var(--p1-color);
     text-align: center;
     padding: 20px;
     text-transform: uppercase;
-    /* 【新增】霓虹文字 */
-    text-shadow: 0 0 5px #fff, 0 0 15px var(--p1-glow);
+}
+/* 【新增】P2 獲勝時的顏色 */
+#winner-text.player2 {
+    color: var(--p2-color);
 }
 
 
@@ -489,7 +434,7 @@ select:focus {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background-color: rgba(13, 12, 34, 0.9); /* 【修改】深色背景 */
+    background-color: rgba(255, 255, 255, 0.9); /* 【修改】白色 */
     backdrop-filter: blur(4px);
     z-index: 9;
     margin: 20px;
@@ -497,8 +442,6 @@ select:focus {
     color: var(--color-text-light);
     font-weight: 600;
     font-size: 1.1rem;
-    font-family: var(--font-display); /* 【新增】 */
-    font-weight: 400;
 }
 
 /* 旋轉動畫 */
@@ -515,14 +458,10 @@ select:focus {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-bottom: 15px;
-    
-    /* 【新增】發光 */
-    box-shadow: 0 0 10px var(--p1-glow);
 }
 
 #ai-thinking-indicator.player2 .spinner {
     border-top-color: var(--p2-color);
-    box-shadow: 0 0 10px var(--p2-glow);
 }
 
 
@@ -561,7 +500,7 @@ select:focus {
     }
 
     h1 {
-        font-size: 2.5rem; /* 【修改】調整像素字體大小 */
+        font-size: 3.25rem; /* 【修改】 */
     }
 
     #status-bar {
@@ -612,13 +551,9 @@ select:focus {
 #batch-controls #start-batch-button {
     grid-column: 1 / 2;
     background-color: var(--p1-color);
-    border-color: var(--p1-color);
-    color: #000;
-    box-shadow: 0 0 8px var(--p1-glow);
 }
 #batch-controls #start-batch-button:hover {
-    background-color: var(--p1-color);
-    box-shadow: 0 0 15px var(--p1-glow);
+    background-color: var(--btn-success-hover);
 }
 #batch-controls #stop-batch-button {
     grid-column: 2 / 3;
@@ -639,8 +574,7 @@ select:focus {
 .progress-bar {
     width: 100%;
     height: 10px;
-    background-color: rgba(0,0,0,0.3);
-    border: 1px solid var(--color-border);
+    background-color: var(--color-border);
     border-radius: 5px;
     overflow: hidden;
 }
@@ -649,7 +583,6 @@ select:focus {
     height: 100%;
     background-color: var(--p1-color);
     transition: width 0.3s ease;
-    box-shadow: 0 0 10px var(--p1-glow);
 }
 
 /* 批次處理時鎖定介面 */
