@@ -185,10 +185,10 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
 
 // --- 【已修改】策略 2: Minimax (迭代加深版) ---
 /**
- * 【重構 5 & Score-Go 修正 1】
+ * 【重構 5 & 最終修正】
  * Minimax 迭代加深
  * - 呼叫新的 makeMove/undoMove
- * - 修正 Score-Go 邏輯 (加入負號)
+ * - 修正 Score-Go 邏輯 (移除根節點的負號)
  */
 function findBestMoveMinimaxIterative(availableMoves) {
     const startTime = performance.now();
@@ -224,8 +224,8 @@ function findBestMoveMinimaxIterative(availableMoves) {
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                // 【Score-Go 修正 1】: 即使得分，下一個狀態的分數也必須被否定
-                score = -minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime);
+                // 【最終修正】: 根節點在 AI 連續出招時，不應否定分數 (因為 minimax 已回傳 AI 視角的分數)
+                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime); // <-- 移除負號
             } else {
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
