@@ -185,9 +185,10 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
 
 // --- 【已修改】策略 2: Minimax (迭代加深版) ---
 /**
- * 【重構 5】
+ * 【重構 5 & Score-Go 修正 1】
  * Minimax 迭代加深
  * - 呼叫新的 makeMove/undoMove
+ * - 修正 Score-Go 邏輯 (加入負號)
  */
 function findBestMoveMinimaxIterative(availableMoves) {
     const startTime = performance.now();
@@ -223,7 +224,8 @@ function findBestMoveMinimaxIterative(availableMoves) {
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime);
+                // 【Score-Go 修正 1】: 即使得分，下一個狀態的分數也必須被否定
+                score = -minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime);
             } else {
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
@@ -271,9 +273,10 @@ function findBestMoveMinimaxIterative(availableMoves) {
 
 
 /**
- * 【重構 6】
+ * 【重構 6 & Score-Go 修正 2】
  * Minimax 核心函式 (NegaMax 變體)
  * - 呼叫新的 makeMove/undoMove
+ * - 修正 Score-Go 邏輯 (加入負號並反轉 alpha/beta)
  */
 function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState, startTime) {
     
@@ -309,7 +312,8 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
-            value = minimax(depth, alpha, beta, isMaxPlayer, true, linesState, squaresState, scoresState, startTime);
+            // 【Score-Go 修正 2】: NegaMax 遞迴必須*永遠*反轉 alpha/beta 並*永遠*否定回傳值
+            value = -minimax(depth, -beta, -alpha, isMaxPlayer, true, linesState, squaresState, scoresState, startTime);
         } else {
             value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
         }
