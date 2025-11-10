@@ -10,7 +10,7 @@
  * 6. 支援「得分後再走一步」的 Minimax
  * 7. (**** 新功能 ****) 策略隨機性 (在多個最佳解中隨機選取)
  * * 【已修改】
- * 8. 支援 maxLineLength > 1 的啟發式搜尋
+ * 8. 支援 maxLineLength > 1 的 Minimax
  * ============================================
  */
 
@@ -70,17 +70,15 @@ self.onmessage = function (e) {
     ttHits = 0;
 
     // 2. 決定 AI 策略
-    // 【修改】
     const availableMoves = getAvailableMoves(); // 參數現在是全域的
     
     let bestMove;
 
+    // 【重構 1】: 唯一的切換條件只剩下「可移動步數」
     // 【智能強化 1】: 讓 Minimax 處理更多情況
-    if (maxLineLength > 1 || availableMoves.length > 32) { // (原為 24)
-        // 【修改】
+    if (availableMoves.length > 32) { // (原為 > 24)
         bestMove = findBestMoveHeuristic(availableMoves); // 參數現在是全域的
     } else {
-        // 【修改】
         bestMove = findBestMoveMinimaxIterative(availableMoves); // 參數現在是全域的
     }
     
@@ -186,6 +184,11 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
 }
 
 // --- 【已修改】策略 2: Minimax (迭代加深版) ---
+/**
+ * 【重構 5】
+ * Minimax 迭代加深
+ * - 呼叫新的 makeMove/undoMove
+ */
 function findBestMoveMinimaxIterative(availableMoves) {
     const startTime = performance.now();
     let maxDepth = Math.min(MAX_SEARCH_DEPTH, availableMoves.length);
@@ -210,13 +213,13 @@ function findBestMoveMinimaxIterative(availableMoves) {
         const sortedMoves = sortMovesForMinimax(availableMoves, linesCopy, squaresCopy);
 
         // 2. 根節點移動迴圈
-        for (const move of sortedMoves) {
+        for (const move of sortedMoves) { // 'move' is {dotA, dotB, segments}
             
             if (performance.now() - startTime > TIME_LIMIT_MS) {
                 break;
             }
 
-            const undoData = makeMove(move, playerAINumber, linesCopy, squaresCopy, scoresCopy);
+            const undoData = makeMove(move.segments, playerAINumber, linesCopy, squaresCopy, scoresCopy);
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
@@ -225,7 +228,7 @@ function findBestMoveMinimaxIterative(availableMoves) {
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
             
-            undoMove(move, undoData, linesCopy, squaresCopy, scoresCopy);
+            undoMove(undoData, linesCopy, squaresCopy, scoresCopy); // 'move' 不再需要
             
             // 【修改】: 儲存所有平手的最佳移動
             if (score > currentBestScoreForThisDepth) {
@@ -252,16 +255,25 @@ function findBestMoveMinimaxIterative(availableMoves) {
     } // 結束迭代加深
 
     if (!overallBestMove) {
-        return findBestMoveHeuristic(availableMoves);
+        // 如果 Minimax 找不到 (例如超時)，退回啟發式
+        const heuristicMove = findBestMoveHeuristic(availableMoves);
+        if (heuristicMove) return heuristicMove;
+        
+        // 如果連啟發式都找不到，隨便給一個
+        if (availableMoves.length > 0) {
+            return { dotA: availableMoves[0].dotA, dotB: availableMoves[0].dotB };
+        }
+        return null;
     }
 
-    return { dotA: overallBestMove.p1, dotB: overallBestMove.p2 };
+    return { dotA: overallBestMove.dotA, dotB: overallBestMove.dotB }; // <-- 這裡回傳的格式正確
 }
 
 
 /**
+ * 【重構 6】
  * Minimax 核心函式 (NegaMax 變體)
- * (此函式不變)
+ * - 呼叫新的 makeMove/undoMove
  */
 function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState, startTime) {
     
@@ -281,7 +293,7 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
 
     // 2. 終止
     // 【修改】
-    const availableMoves = getAvailableMoves(linesState); // 這裡因為 depth > 0 且 maxLineLength=1, 會自動取得 1-length segments
+    const availableMoves = getAvailableMoves(linesState); // 這裡會自動取得標準 DotMove 格式
     if (depth === 0 || availableMoves.length === 0) {
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
@@ -290,10 +302,10 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
     let bestValue = -Infinity; 
     const sortedMoves = (depth > 4) ? sortMovesForMinimax(availableMoves, linesState, squaresState) : availableMoves;
 
-    for (const move of sortedMoves) {
+    for (const move of sortedMoves) { // 'move' is {dotA, dotB, segments}
         const currentPlayerToMove = isMaxPlayer ? playerAINumber : playerOpponentNumber;
         
-        const undoData = makeMove(move, currentPlayerToMove, linesState, squaresState, scoresState);
+        const undoData = makeMove(move.segments, currentPlayerToMove, linesState, squaresState, scoresState);
         
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
@@ -302,7 +314,7 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
             value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
         }
 
-        undoMove(move, undoData, linesState, squaresState, scoresState);
+        undoMove(undoData, linesState, squaresState, scoresState); // 'move' 不再需要
         
         bestValue = Math.max(bestValue, value);
         alpha = Math.max(alpha, bestValue);
@@ -366,20 +378,54 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
 }
 
 
-// --- Minimax 輔助函式 (排序) ---
-// (此函式不變)
+/**
+ * 【重構 7】
+ * Minimax 輔助函式 (排序)
+ * - 'moves' 是一個 { dotA, dotB, segments } 陣列
+ */
 function sortMovesForMinimax(moves, linesState, squaresState) {
-    return moves.map(move => {
+    return moves.map(move => { // move is { dotA, dotB, segments }
         let priority = 0;
-        const adjacentSquares = getAdjacentSquares(move.id, squaresState);
-        for (const sq of adjacentSquares) {
-            if (sq.filled) continue;
-            const sides = getSidesDrawn(sq, linesState);
-            if (sides === 3) priority = 100;
-            else if (sides === 2) priority = -100;
-            else if (sides === 1) priority = -10;
-            else priority = 10;
+        let uniqueAdjacentSquares = new Set();
+        
+        // 1. 找到此移動碰到的所有方塊
+        for (const seg of move.segments) {
+            const adjacentSquares = getAdjacentSquares(seg.id, squaresState);
+            adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
         }
+
+        // 2. 評估移動後的局勢
+        for (const sq of uniqueAdjacentSquares) {
+            if (sq.filled) continue;
+            
+            // 計算移動 *前* 的邊數
+            let sidesBeforeMove = 0;
+            sq.lineKeys.forEach(key => {
+                if (linesState[key].players.length > 0) sidesBeforeMove++;
+            });
+
+            // 計算這個 move 會畫上幾條邊
+            let segmentsThisMoveDraws = 0;
+            sq.lineKeys.forEach(key => {
+                // 檢查 'move' 物件裡的 'segments' 陣列是否包含這條 key
+                if (move.segments.some(seg => seg.id === key)) {
+                    segmentsThisMoveDraws++;
+                }
+            });
+            
+            const sidesAfterMove = sidesBeforeMove + segmentsThisMoveDraws;
+
+            if (sidesAfterMove === 4) priority += 100; // 得分 = 高優先
+            else if (sidesAfterMove === 3) priority -= 100; // 製造 3 邊 = 低優先
+            else if (sidesAfterMove === 2) priority -= 10; // 製造 2 邊 = 稍低優先
+            else priority += 1; // 安全
+        }
+        
+        // 優先選擇「全新」的線 (沒有重疊對手或自己的線)
+        if (move.segments.every(seg => seg.players.length === 0)) {
+             priority += 5;
+        }
+
         return { move, priority };
     }).sort((a, b) => b.priority - a.priority)
       .map(item => item.move);
@@ -389,19 +435,20 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
 // --- 遊戲狀態模擬函式 (Worker 內部) ---
 
 /**
- * 【已修改】
+ * 【重構 2】
  * 根據 maxLineLength 產生可行的移動
- * - 如果 maxLineLength === 1, 傳回 1-length segments (Minimax 策略用)
- * - 如果 maxLineLength > 1, 傳回 {dotA, dotB} 物件 (Heuristic 策略用)
+ * - *所有* 策略都回傳 {dotA, dotB, segments} 格式
  */
 function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
     const moves = [];
     
     if (lineLength === 1) {
-        // Minimax 策略: 傳回 1-length segments (舊有邏輯)
+        // Minimax 策略: 傳回 1-length segments (但包裝成標準 DotMove 格式)
         for (const id in linesObj) {
             if (linesObj[id].players.length === 0) {
-                moves.push(linesObj[id]);
+                const seg = linesObj[id];
+                // 將單一 segment 包裝成 "DotMove" 格式
+                moves.push({ dotA: seg.p1, dotB: seg.p2, segments: [seg] });
             }
         }
         
@@ -460,19 +507,33 @@ function getBoardHash(linesObj) {
 }
 
 /**
- * 【已修正】模擬下棋
+ * 【重構 3】模擬下棋
+ * - 現在 'moveSegments' 是一個 segment 陣列
  */
-function makeMove(segment, player, linesState, squaresState, scoresState) {
+function makeMove(moveSegments, player, linesState, squaresState, scoresState) {
     const undoData = {
         player: player, 
         scoredCount: 0,
-        filledSquares: []
+        filledSquares: [], // 記下哪些方塊被填滿
+        segmentsChanged: []  // 記下哪些線段被繪製
     };
-    if (!linesState[segment.id].players.includes(player)) {
-        linesState[segment.id].players.push(player);
+
+    let uniqueAdjacentSquares = new Set();
+
+    // 1. 繪製所有線段
+    for (const segment of moveSegments) {
+        if (!linesState[segment.id].players.includes(player)) {
+            linesState[segment.id].players.push(player);
+            undoData.segmentsChanged.push(segment.id); // 記錄被改變的線
+        }
+        
+        // 收集所有鄰近的方塊，稍後檢查
+        const adjacentSquares = getAdjacentSquares(segment.id, squaresState);
+        adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
     }
-    const adjacentSquares = getAdjacentSquares(segment.id, squaresState);
-    for (const sq of adjacentSquares) {
+
+    // 2. 檢查所有受影響的方塊是否得分
+    for (const sq of uniqueAdjacentSquares) {
         if (!sq.filled) {
             const sides = getSidesDrawn(sq, linesState);
             if (sides === 4) {
@@ -480,29 +541,39 @@ function makeMove(segment, player, linesState, squaresState, scoresState) {
                 sq.player = player;
                 scoresState[player]++;
                 undoData.scoredCount++;
-                undoData.filledSquares.push(sq);
+                undoData.filledSquares.push(sq); // 記錄被填滿的方塊
             }
         }
     }
+    
     return undoData;
 }
 
 /**
- * 【已修正】模擬撤銷下棋
+ * 【重構 4】模擬撤銷下棋
+ * - 現在只接收 undoData
  */
-function undoMove(segment, undoData, linesState, squaresState, scoresState) {
+function undoMove(undoData, linesState, squaresState, scoresState) {
     const player = undoData.player;
-    const pIndex = linesState[segment.id].players.indexOf(player);
-    if (pIndex > -1) {
-        linesState[segment.id].players.splice(pIndex, 1);
+    
+    // 1. 擦除線段
+    for (const segmentId of undoData.segmentsChanged) {
+        const pIndex = linesState[segmentId].players.indexOf(player);
+        if (pIndex > -1) {
+            linesState[segmentId].players.splice(pIndex, 1);
+        }
     }
     
+    // 2. 恢復方塊
     if (undoData.scoredCount > 0) {
         for (const sq of undoData.filledSquares) {
-            const player = sq.player;
-            scoresState[player]--;
-            sq.filled = false;
-            sq.player = null;
+            // 在 deepCopy 的世界裡，我們需要找到 'squaresState' 中對應的方塊
+            const stateSquare = squaresState.find(s => s.lineKeys[0] === sq.lineKeys[0] && s.lineKeys[1] === sq.lineKeys[1]);
+            if (stateSquare) {
+                scoresState[player]--;
+                stateSquare.filled = false;
+                stateSquare.player = null;
+            }
         }
     }
 }
