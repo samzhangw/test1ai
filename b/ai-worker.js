@@ -74,13 +74,10 @@ self.onmessage = function (e) {
     
     let bestMove;
 
-    // 【重構 1】: 唯一的切換條件只剩下「可移動步數」
-    // 【智能強化 1】: 讓 Minimax 處理更多情況
-    if (availableMoves.length > 32) { // (原為 > 24)
-        bestMove = findBestMoveHeuristic(availableMoves); // 參數現在是全域的
-    } else {
-        bestMove = findBestMoveMinimaxIterative(availableMoves); // 參數現在是全域的
-    }
+    // 【貪婪模式修改】:
+    // 強制 AI 永遠使用「啟發式(貪婪)」搜尋，
+    // 禁用 Minimax (findBestMoveMinimaxIterative)。
+    bestMove = findBestMoveHeuristic(availableMoves);
     
     // 3. 傳回找到的最佳移動
     if (bestMove && bestMove.dotA && bestMove.dotB) {
