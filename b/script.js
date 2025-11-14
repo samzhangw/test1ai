@@ -47,9 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let maxLineLength = 1;
     const DOT_SPACING = 100;
     const PADDING = 50;
-    const DOT_RADIUS = 6;
+    
+    // 【修改】為了顯示數字，將點的半徑和點擊範圍調大
+    const DOT_RADIUS = 12; // (原為 6)
     const LINE_WIDTH = 8;
-    const CLICK_TOLERANCE_DOT = 15;
+    const CLICK_TOLERANCE_DOT = 18; // (原為 15)
 
     // 玩家顏色
     const PLAYER_COLORS = {
@@ -177,6 +179,15 @@ document.addEventListener('DOMContentLoaded', () => {
         moveHistory = [];
         turnCounter = 1;
 
+        // 【新增】為點分配 1-4 的數字 (類數獨)
+        // 隨機排列 1, 2, 3, 4
+        const numbers = [1, 2, 3, 4].sort(() => Math.random() - 0.5);
+        // 建立 2x2 查找表
+        const numKey = [
+            [numbers[0], numbers[1]],
+            [numbers[2], numbers[3]]
+        ];
+
         // 1. 產生點
         for (let r = 0; r < gridRows; r++) {
             dots[r] = [];
@@ -184,7 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 dots[r][c] = {
                     x: c * DOT_SPACING + PADDING,
                     y: r * DOT_SPACING + PADDING,
-                    r: r, c: c
+                    r: r, c: c,
+                    number: numKey[r % 2][c % 2] // 【新增】分配數字
                 };
             }
         }
@@ -371,6 +383,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.arc(dots[r][c].x, dots[r][c].y, currentDotRadius, 0, 2 * Math.PI);
                 ctx.fillStyle = '#34495e';
                 ctx.fill();
+
+                // 【新增】繪製點上的數字
+                const dotNumber = dots[r][c].number;
+                if (dotNumber) {
+                    // 根據點的半徑動態調整字體大小
+                    const fontSize = Math.max(8, Math.floor(currentDotRadius * 1.1)); 
+                    ctx.font = `bold ${fontSize}px var(--font-main, sans-serif)`;
+                    ctx.fillStyle = '#ffffff'; // 白色文字
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    // 輕微 Y 軸偏移，使其在視覺上更置中
+                    ctx.fillText(dotNumber, dots[r][c].x, dots[r][c].y + 1); 
+                }
             }
         }
         
