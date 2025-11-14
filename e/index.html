@@ -1,52 +1,35 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-R">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>點格棋盤遊戲</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <title>點點圍三角每局結束匯出png</title> <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css" >
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 </head>
 <body>
 
-    <div id="main-container">
+    <h1>點點圍三角每局結束匯出png</h1>
+    <p class="subtitle">連點成線、圍出三角。支援與朋友或電腦對戰！</p>
 
-        <div id="game-column">
+    <div id="game-container">
+
+        <div id="game-primary-column">
+            <canvas id="game-canvas"></canvas>
             
-            <header>
-                <h1>點格棋盤</h1>
-                <p class="subtitle">經典策略遊戲，挑戰您的智慧</p>
-            </header>
-
-            <div id="canvas-container">
-                <canvas id="game-canvas"></canvas>
-
-                <div id="ai-thinking-indicator" class="hidden">
-                    <div class="spinner"></div>
-                    <p>電腦運算中...</p>
-                </div>
-
-                <div id="game-over-message" class="hidden">
-                    <span id="winner-text"></span>
-                </div>
-            </div>
-
-            <div id="action-bar" class="hidden">
+            <div id="action-bar">
                 <button id="confirm-line-button" class="btn primary">確認連線</button>
                 <button id="cancel-line-button" class="btn danger">取消選取</button>
             </div>
         </div>
 
-        <div id="controls-column">
-
-            <div id="status-bar" class="control-card">
+        <div id="game-secondary-column">
+            <div id="status-bar">
                 <div id="player1-score" class="score-box active">
                     玩家 1: <span id="score1">0</span>
                 </div>
@@ -55,78 +38,113 @@
                 </div>
             </div>
 
-            <div id="game-controls" class="control-card">
-                <div class="control-section">
-                    <h3 class="section-title">遊戲設定</h3>
-                    
-                    <div class="settings-grid">
-                        <div id="game-mode-selector">
-                            <label for="game-mode">遊戲模式</label>
-                            <select id="game-mode">
-                                <option value="pvp">玩家 vs 玩家</option>
-                                <option value="pvc">玩家 vs 電腦</option>
-                                <option value="cvc">電腦 vs 電腦</option>
-                            </select>
-                        </div>
-                        <div id="board-size-selector">
-                            <label for="board-rows">列數</label>
-                            <input id="board-rows" type="number" min="2" max="12" value="4" />
-                            <span class="separator">×</span>
-                            <label for="board-cols">欄數</label>
-                            <input id="board-cols" type="number" min="2" max="12" value="4" />
-                        </div>
-                        <div id="line-length-selector">
-                            <label for="line-length">連線長度</label>
-                            <input id="line-length" type="number" min="1" max="10" value="1" />
-                        </div>
-                        <div id="score-again-selector">
-                            <label for="score-again-mode">得分後連線</label>
-                            <select id="score-again-mode">
-                                <option value="yes">是 (經典)</option>
-                                <option value="no" selected>否 (輪流)</option>
-                            </select>
-                        </div>
-                    </div> 
+            <div id="ai-thinking-message" class="hidden">電腦思考中...</div>
 
-                    <div class="button-group">
-                        <button id="reset-button" class="btn success">
-                            <span class="btn-icon">↻</span>
-                            重新開始
-                        </button>
-                        <button id="export-png-button" class="btn secondary">
-                            <span class="btn-icon">↓</span>
-                            匯出 PNG
-                        </button>
-                        <button id="export-csv-button" class="btn secondary">
-                            <span class="btn-icon">📄</span>
-                            匯出紀錄
-                        </button>
+            <div id="ai-log-container" class="control-group hidden">
+                <label class="control-label">AI 模擬紀錄</label>
+                <pre id="ai-log-output"></pre>
+            </div>
+            
+            <div id="batch-controls" class="control-group">
+                <label class="control-label">批次對戰 (僅限 C v C)</label>
+                <div class="batch-input-group">
+                    <input type="number" id="batch-count-input" class="control-select" value="10" min="1" max="1000">
+                    <button id="start-batch-button" class="btn success">開始批次</button>
+                    <button id="stop-batch-button" class="btn danger hidden">終止批次</button> 
+                </div>
+                <p id="batch-status-message"></p>
+            </div>
+
+
+            <div id="game-controls">
+                <div class="control-group">
+                    <label for="board-size-select" class="control-label">棋盤大小</label>
+                    <select id="board-size-select" class="control-select">
+                        <option value="tiny">最小</option>
+                        <option value="small">小</option>
+                        <option value="medium" selected>中</option>
+                        <option value="large">大</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="line-length-select" class="control-label">連線格數</label>
+                    <select id="line-length-select" class="control-select">
+                        <option value="1" selected>1 格</option> <option value="2">2 格</option>
+                        <option value="3">3 格</option> <option value="4">4 格</option>
+                        <option value="5">5 格</option>
+                    </select>
+                    </div>
+                <div class="control-group">
+                    <label for="game-mode-select" class="control-label">遊戲模式</label>
+                    <select id="game-mode-select" class="control-select">
+                        <option value="0" selected>玩家 V.S. 玩家</option>
+                        <option value="1">玩家 V.S. 電腦</option>
+                        <option value="2">電腦 V.S. 電腦</option>
+                    </select>
+                </div>
+                
+                <div class="control-group hidden" id="ai-p1-type-group">
+                    <label for="ai-p1-type-select" class="control-label">AI (P1) 類型</label>
+                    <select id="ai-p1-type-select" class="control-select">
+                        <option value="minimax" selected>Minimax (智能)</option>
+                        <option value="greedy">Greedy (貪婪)</option>
+                    </select>
+                </div>
+                <div class="control-group hidden" id="ai-p2-type-group">
+                    <label for="ai-p2-type-select" class="control-label">AI (P2) 類型</label>
+                    <select id="ai-p2-type-select" class="control-select">
+                        <option value="minimax" selected>Minimax (智能)</option>
+                        <option value="greedy">Greedy (貪婪)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="input-mode-select" class="control-label">操作模式</label>
+                    <select id="input-mode-select" class="control-select">
+                        <option value="drag" selected>滑動連線</option>
+                        <option value="click">點擊連線</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">遊戲規則</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="score-and-go-checkbox">
+                        <label for="score-and-go-checkbox">得分後再走一步</label>
                     </div>
                 </div>
-
-                <div class="control-section">
-                    <h3 class="section-title">批次 CVC 對戰</h3>
-                    
-                    <div id="batch-controls">
-                        <div class="batch-input-group">
-                            <label for="batch-games-input">對戰場次</label>
-                            <input id="batch-games-input" type="number" min="1" max="1000" value="10" />
-                        </div>
-                        <button id="start-batch-button" class="btn primary">開始批次</button>
-                        <button id="stop-batch-button" class="btn danger hidden">強制停止</button>
-                    </div>
-
-                    <div id="batch-status" class="hidden">
-                        <p>處理中...</p>
-                        <div class="progress-bar">
-                            <div id="progress-bar-inner"></div>
-                        </div>
-                    </div>
+                
+                <div class="control-group">
+                    <label class="control-label">重新開始</label>
+                    <button id="reset-button" class="btn success">開始新遊戲</button>
                 </div>
+
+                <div class="control-group">
+                    <label class="control-label">匯出紀錄 (CSV)</label>
+                    <button id="export-log-button" class="btn primary">下載遊戲紀錄</button>
                 </div>
-        </div> 
+
+                <div class="control-group">
+                    <label class="control-label">匯出棋盤 (PNG)</label>
+                    <button id="export-png-button" class="btn primary">下載棋盤圖片</button>
+                </div>
+
+            </div>
+        </div>
 
     </div> 
+    
+    <div id="modal-overlay" class="hidden">
+        <div id="game-over-message">
+            <span id="winner-text"></span>
+            <span id="final-score-text"></span> 
+            
+            <div id="modal-button-group">
+                <button id="reset-button-modal" class="btn success reset-full-width">重新開始</button>
+                
+                <button id="export-log-button-modal" class="btn primary">下載紀錄 (CSV)</button>
+                <button id="export-png-button-modal" class="btn primary">下載棋盤 (PNG)</button>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
