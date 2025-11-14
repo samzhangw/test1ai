@@ -179,13 +179,13 @@ document.addEventListener('DOMContentLoaded', () => {
         moveHistory = [];
         turnCounter = 1;
 
-        // 【新增】為點分配 1-4 的數字 (類數獨)
-        // 隨機排列 1, 2, 3, 4
-        const numbers = [1, 2, 3, 4].sort(() => Math.random() - 0.5);
+        // 【修改】為點分配 1-4 的數字 (固定順時針)
         // 建立 2x2 查找表
+        // (r,c) = 1, (r,c+1) = 2
+        // (r+1,c) = 4, (r+1,c+1) = 3
         const numKey = [
-            [numbers[0], numbers[1]],
-            [numbers[2], numbers[3]]
+            [1, 2], // 對應 r % 2 == 0
+            [4, 3]  // 對應 r % 2 == 1
         ];
 
         // 1. 產生點
@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     x: c * DOT_SPACING + PADDING,
                     y: r * DOT_SPACING + PADDING,
                     r: r, c: c,
-                    number: numKey[r % 2][c % 2] // 【新增】分配數字
+                    number: numKey[r % 2][c % 2] // 【修改】分配固定的數字
                 };
             }
         }
