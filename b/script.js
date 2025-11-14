@@ -611,7 +611,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function downloadCSV() {
         const csvContent = generateCSVString();
         if (csvContent === null) {
-            alert("目前沒有任何對戰紀錄。");
+            // 【修改】 移除 alert，避免在自動下載時跳出
+            // alert("目前沒有任何對戰紀錄。"); 
             return;
         }
         
@@ -636,6 +637,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    /**
+     * 【修改】
+     * 記錄移動，並在批次模式下儲存每一步的 PNG
+     * 【修改 2】: 在「正常模式」下也儲存 PNG (到 moveHistory 物件中)
+     */
     function logMove(dotA, dotB, scored) {
         const moveData = {
             turn: turnCounter,
@@ -644,8 +650,32 @@ document.addEventListener('DOMContentLoaded', () => {
             scored: scored ? "Yes" : "No",
             scoreP1: scores[1],
             scoreP2: scores[2]
+            // pngBase64 將在下面添加
         };
-        moveHistory.push(moveData);
+        moveHistory.push(moveData); // 先推入
+
+        // --- 【修改】 無論是否批次，都嘗試產生 PNG ---
+        try {
+            const pngDataURL = getCanvasAsPNGDataURL();
+            const pngBase64 = pngDataURL.split(',')[1];
+
+            if (pngBase64) {
+                if (isBatchRunning && batchZip) {
+                    // --- 批次模式: 存入 ZIP ---
+                    const stepNumber = moveHistory.length;
+                    const stepFileName = `step_${String(stepNumber).padStart(3, '0')}.png`;
+                    batchZip.file(`game_${currentGameNumber}/steps/${stepFileName}`, pngBase64, { base64: true });
+                
+                } else if (!isBatchRunning) {
+                    // --- 正常模式: 存入 moveHistory 供稍後下載 ---
+                    moveData.pngBase64 = pngBase64; // 將 PNG 附加到剛剛推入的物件中
+                }
+            }
+        } catch (e) {
+            console.error(`在遊戲 ${currentGameNumber} 步驟 ${moveHistory.length} 儲存 PNG 時發生錯誤:`, e);
+        }
+        // --- 【修改結束】 ---
+
         if (!(scored && scoreAndGo)) {
              turnCounter++;
         }
@@ -752,7 +782,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /**
      * 【已修改】
-     * 遊戲結束函式，加入批次處理邏輯
+     * 遊戲結束函式
+     * 【修改】：在正常模式下自動下載 CSV 和 步驟PNG ZIP
      */
     function endGame() {
         aiThinkingIndicator.classList.add('hidden');
@@ -766,12 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 batchZip.file(`game_${currentGameNumber}/history.csv`, "\uFEFF" + csvData);
             }
 
-            // 2. 產生 PNG 內容 (Base64)
-            const pngDataURL = getCanvasAsPNGDataURL();
-            const pngBase64 = pngDataURL.split(',')[1];
-            if (pngBase64) {
-                batchZip.file(`game_${currentGameNumber}/board.png`, pngBase64, { base64: true });
-            }
+            // 2. (每一步的 PNG 已經在 logMove 中儲存了)
 
             // 3. 推進
             currentGameNumber++;
@@ -794,6 +820,13 @@ document.addEventListener('DOMContentLoaded', () => {
             gameOverMessage.classList.remove('hidden');
             actionBar.classList.add('hidden');
             canvas.style.pointerEvents = 'auto';
+
+            // --- 【修改】 分出勝負時自動下載 CSV 和 PNG Zip ---
+            if (moveHistory.length > 0) {
+                downloadCSV();
+                downloadStepsZip(); // 【新增】
+            }
+            // --- 【修改結束】 ---
         }
     }
     
@@ -982,6 +1015,49 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!batchZip) return;
 
         batchZip.generateAsync({ type: "blob" })
+            .then(function(content) {
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(content);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            });
+    }
+
+    /**
+     * 【新增】
+     * 下載「單場」遊戲的所有步驟 PNG (打包成 ZIP)
+     */
+    function downloadStepsZip() {
+        if (typeof JSZip === 'undefined') {
+            console.error('錯誤：JSZip 庫未載入。無法下載步驟 PNG。');
+            return;
+        }
+        // 檢查第一步是否有 pngBase64
+        if (moveHistory.length === 0 || !moveHistory[0].pngBase64) {
+            console.warn("沒有可下載的步驟 PNG (可能尚未儲存)。");
+            return;
+        }
+
+        const zip = new JSZip();
+        const stepsFolder = zip.folder("steps"); // 在 zip 中建立一個 'steps' 資料夾
+
+        moveHistory.forEach((move, index) => {
+            if (move.pngBase64) {
+                const stepNumber = index + 1;
+                const stepFileName = `step_${String(stepNumber).padStart(3, '0')}.png`;
+                // 將 base64 存入 'steps' 資料夾
+                stepsFolder.file(stepFileName, move.pngBase64, { base64: true });
+            }
+        });
+
+        const filename = "dots-and-boxes-steps.zip";
+        
+        zip.generateAsync({ type: "blob" })
             .then(function(content) {
                 const link = document.createElement('a');
                 const url = URL.createObjectURL(content);
