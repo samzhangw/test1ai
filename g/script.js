@@ -21,8 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const lineLengthInput = document.getElementById('line-length');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
     
-    // 【新增】AI 難度選擇
-    const aiDifficultySelect = document.getElementById('ai-difficulty');
+    // 【新增】兩個 AI 難度選擇
+    const ai1DifficultySelect = document.getElementById('ai-1-difficulty');
+    const ai2DifficultySelect = document.getElementById('ai-2-difficulty');
 
     // 批次處理 UI 元素
     const batchControls = document.getElementById('batch-controls');
@@ -821,11 +822,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridCols: gridCols
             };
             
-            // 【修改】將難度設定傳給 Worker
+            // 【修改】判斷目前是哪位 AI，使用對應的難度設定
+            let difficulty;
+            if (gameMode === 'cvc') {
+                if (currentPlayer === 1) {
+                    difficulty = ai1DifficultySelect.value;
+                } else {
+                    difficulty = ai2DifficultySelect.value;
+                }
+            } else if (gameMode === 'pvc') {
+                // 在 PVC 模式，玩家是 P1，電腦是 P2，所以使用 AI-2 的設定
+                difficulty = ai2DifficultySelect.value;
+            }
+
             const settings = {
                 scoreAndGo: scoreAndGo,
                 maxLineLength: maxLineLength,
-                difficulty: aiDifficultySelect.value // 傳遞難度
+                difficulty: difficulty 
             };
 
             if (aiWorker) {
@@ -1035,8 +1048,22 @@ document.addEventListener('DOMContentLoaded', () => {
     confirmLineButton.addEventListener('click', confirmLine);
     cancelLineButton.addEventListener('click', cancelLine);
     
+    // 【修改】處理模式切換，控制選單顯示狀態
     function handleGameModeChange() {
         gameMode = gameModeSelect.value;
+        
+        // UI 控制：如果不是 CVC，禁用 AI 1 選擇器 (因為 P1 是人類)
+        if (gameMode === 'pvp') {
+             ai1DifficultySelect.disabled = true;
+             ai2DifficultySelect.disabled = true;
+        } else if (gameMode === 'pvc') {
+             ai1DifficultySelect.disabled = true;
+             ai2DifficultySelect.disabled = false;
+        } else { // cvc
+             ai1DifficultySelect.disabled = false;
+             ai2DifficultySelect.disabled = false;
+        }
+
         updateUI();
         if (!isGameOver()) {
             checkAndTriggerAIMove();
@@ -1062,6 +1089,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (startPlayerSelect) {
         startPlayerSelect.addEventListener('change', initGame);
     }
+    // 【新增】AI 難度變更時不重置，只更新變數 (下次 AI 思考時生效)
+    ai1DifficultySelect.addEventListener('change', () => {});
+    ai2DifficultySelect.addEventListener('change', () => {});
+
 
     startBatchButton.addEventListener('click', startBatchProcess);
     stopBatchButton.addEventListener('click', () => {
@@ -1070,5 +1101,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 初始化時執行一次模式檢查
+    handleGameModeChange(); 
     initGame();
 });
