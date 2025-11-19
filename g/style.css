@@ -288,7 +288,8 @@ canvas {
 #line-length-selector,
 #score-again-selector,
 #start-player-selector,
-#ai-difficulty-selector { 
+#ai-1-difficulty-selector,
+#ai-2-difficulty-selector { 
     display: flex;
     flex-direction: column;
     gap: 8px;
