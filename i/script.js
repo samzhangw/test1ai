@@ -1,7 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // 取得 HTML 元素
+    // 取得 HTML 元素 (加入安全檢查)
     const canvas = document.getElementById('game-canvas');
+    if (!canvas) {
+        console.error("找不到 canvas 元素，請檢查 HTML");
+        return;
+    }
     const ctx = canvas.getContext('2d');
+    
     const player1ScoreBox = document.getElementById('player1-score');
     const player2ScoreBox = document.getElementById('player2-score');
     const gameOverMessage = document.getElementById('game-over-message');
@@ -21,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lineLengthInput = document.getElementById('line-length');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
     
+    // 新功能元素 (可能不存在於舊 HTML)
     const ai1DifficultySelect = document.getElementById('ai-1-difficulty');
     const ai2DifficultySelect = document.getElementById('ai-2-difficulty');
     const hintButton = document.getElementById('hint-button');
@@ -39,12 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // AI Web Worker
     let aiWorker;
     if (window.Worker) {
-        aiWorker = new Worker('ai-worker.js');
-        aiWorker.onmessage = handleWorkerMessage;
-        aiWorker.onerror = handleWorkerError;
+        try {
+            aiWorker = new Worker('ai-worker.js');
+            aiWorker.onmessage = handleWorkerMessage;
+            aiWorker.onerror = handleWorkerError;
+        } catch (err) {
+            console.error("Worker 初始化失敗:", err);
+        }
     } else {
         console.error("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
-        alert("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
     }
 
     // 遊戲設定
@@ -58,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const LINE_WIDTH = 8;
     const CLICK_TOLERANCE_DOT = 20;
 
-    // 【修改】淺色模式配色
+    // 淺色模式配色
     const PLAYER_COLORS = {
         1: { line: '#3b82f6', fill: 'rgba(59, 130, 246, 0.2)', text: '#2563eb' },
         2: { line: '#f43f5e', fill: 'rgba(244, 63, 94, 0.2)', text: '#e11d48' },
@@ -101,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleWorkerMessage(e) {
         const { type, dotA, dotB, winRate } = e.data;
         
-        aiThinkingIndicator.classList.add('hidden');
+        if(aiThinkingIndicator) aiThinkingIndicator.classList.add('hidden');
 
         if (winRate !== undefined) {
             updateWinRateUI(winRate);
@@ -134,6 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateWinRateUI(rate) {
+        if (!winRateContainer || !winRateValue || !winRateBarFill) return; // 安全檢查
+
         winRateContainer.classList.remove('hidden');
         
         let displayRate = rate;
@@ -168,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleWorkerError(error) {
         console.error("AI Worker 發生錯誤:", error.message, error);
-        aiThinkingIndicator.classList.add('hidden');
+        if(aiThinkingIndicator) aiThinkingIndicator.classList.add('hidden');
         
         if (isBatchRunning) {
             alert("AI 運算時發生嚴重錯誤，批次處理已終止。");
@@ -184,20 +195,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function initGame() {
         if (isBatchRunning) {
             gameMode = 'cvc';
-            gameModeSelect.value = 'cvc';
+            if(gameModeSelect) gameModeSelect.value = 'cvc';
             ANIMATION_DURATION = 0; 
             
             const percent = (Math.max(0, currentGameNumber - 1) / totalGamesToRun) * 100;
             const percentText = document.getElementById('percent-text');
             if(percentText) percentText.textContent = Math.round(percent) + '%';
-            progressBarInner.style.width = `${percent}%`;
+            if(progressBarInner) progressBarInner.style.width = `${percent}%`;
 
         } else {
-            gameMode = gameModeSelect.value;
+            gameMode = gameModeSelect ? gameModeSelect.value : 'pvp';
             ANIMATION_DURATION = 500;
         }
 
-        winRateContainer.classList.add('hidden');
+        if(winRateContainer) winRateContainer.classList.add('hidden');
 
         const desiredRows = parseInt(boardRowsInput && boardRowsInput.value ? boardRowsInput.value : '4', 10);
         const desiredCols = parseInt(boardColsInput && boardColsInput.value ? boardColsInput.value : '4', 10);
@@ -205,6 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gridCols = Math.max(2, Math.min(12, isNaN(desiredCols) ? 4 : desiredCols));
         if (boardRowsInput && boardRowsInput.value != String(gridRows)) boardRowsInput.value = String(gridRows);
         if (boardColsInput && boardColsInput.value != String(gridCols)) boardColsInput.value = String(gridCols);
+        
         const desiredLength = parseInt(lineLengthInput && lineLengthInput.value ? lineLengthInput.value : '1', 10);
         const maxAllowedLength = Math.max(gridRows - 1, gridCols - 1);
         maxLineLength = Math.max(1, Math.min(maxAllowedLength, isNaN(desiredLength) ? 1 : desiredLength));
@@ -237,9 +249,10 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedDot1 = null;
         selectedDot2 = null;
         currentHint = null;
-        actionBar.classList.add('hidden');
-        gameOverMessage.classList.add('hidden');
-        aiThinkingIndicator.classList.add('hidden');
+        
+        if(actionBar) actionBar.classList.add('hidden');
+        if(gameOverMessage) gameOverMessage.classList.add('hidden');
+        if(aiThinkingIndicator) aiThinkingIndicator.classList.add('hidden');
         moveHistory = [];
         turnCounter = 1;
 
@@ -347,6 +360,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawCanvasInternal() {
+        if(!canvas || !ctx) return;
+        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         squares.forEach(sq => {
@@ -354,7 +369,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fillStyle = PLAYER_COLORS[sq.player].fill;
                 const radius = 16; 
                 ctx.beginPath();
-                ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
+                // 【修復】相容性修正：如果瀏覽器不支援 roundRect，改用 rect
+                if (ctx.roundRect) {
+                    ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
+                } else {
+                    ctx.rect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12);
+                }
                 ctx.fill();
                 
                 ctx.fillStyle = PLAYER_COLORS[sq.player].text;
@@ -474,7 +494,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleCanvasClick(e) {
-        if (isAnimating || isBatchRunning || gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2) || !actionBar.classList.contains('hidden')) {
+        if (isAnimating || isBatchRunning || gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) {
+            // 注意：移除对 actionBar hidden 的檢查，避免意外鎖死
+            // 但要確保非玩家回合不能點擊
             return;
         }
         
@@ -522,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     selectedDot1 = null;
                 } else {
                     selectedDot2 = clickedDot;
-                    actionBar.classList.remove('hidden');
+                    if(actionBar) actionBar.classList.remove('hidden');
                 }
             }
         }
@@ -594,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         selectedDot1 = null;
         selectedDot2 = null;
-        actionBar.classList.add('hidden');
+        if(actionBar) actionBar.classList.add('hidden');
         
         drawCanvas();
         updateUI();
@@ -617,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function cancelLine() {
         selectedDot1 = null;
         selectedDot2 = null;
-        actionBar.classList.add('hidden');
+        if(actionBar) actionBar.classList.add('hidden');
         drawCanvas();
     }
 
@@ -740,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function isGameOver() {
-        return !gameOverMessage.classList.contains('hidden');
+        return gameOverMessage && !gameOverMessage.classList.contains('hidden');
     }
 
     function findNearestDot(mouseX, mouseY) {
@@ -808,79 +830,14 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     }
 
-    function updateUI() {
-        const player1Name = getPlayerName(1);
-        const player2Name = getPlayerName(2);
-        
-        player1ScoreBox.innerHTML = `<div class="p-label">${player1Name}</div><span>${scores[1]}</span>`;
-        player2ScoreBox.innerHTML = `<div class="p-label">${player2Name}</div><span>${scores[2]}</span>`;
-
-        if (currentPlayer === 1) {
-            player1ScoreBox.classList.add('active');
-            player2ScoreBox.classList.remove('active', 'player2');
-        } else {
-            player1ScoreBox.classList.remove('active');
-            player2ScoreBox.classList.add('active', 'player2');
-        }
-    }
-
-    function getWinnerMessage() {
-        const player1Name = getPlayerName(1);
-        const player2Name = getPlayerName(2);
-        let winnerMessage = "";
-        if (scores[1] > scores[2]) {
-            winnerMessage = `${player1Name} 獲勝！`;
-        } else if (scores[2] > scores[1]) {
-            winnerMessage = `${player2Name} 獲勝！`;
-        } else {
-            winnerMessage = "平手！";
-        }
-        return winnerMessage;
-    }
-
-    function endGame() {
-        aiThinkingIndicator.classList.add('hidden');
-        currentHint = null;
-        
-        if (isBatchRunning) {
-            const csvData = generateCSVString();
-            if (csvData) {
-                batchZip.file(`game_${currentGameNumber}/history.csv`, "\uFEFF" + csvData);
-            }
-
-            currentGameNumber++;
-
-            if (currentGameNumber <= totalGamesToRun) {
-                setTimeout(initGame, 20); 
-            } else {
-                batchStatus.querySelector('p').textContent = `已完成 ${totalGamesToRun} 場遊戲！`;
-                progressBarInner.style.width = `100%`;
-                downloadBatchZip();
-                stopBatchProcess();
-            }
-
-        } else {
-            const winnerMessage = getWinnerMessage();
-            winnerText.textContent = winnerMessage;
-            gameOverMessage.classList.remove('hidden');
-            actionBar.classList.add('hidden');
-            canvas.style.pointerEvents = 'auto';
-
-            if (moveHistory.length > 0) {
-                downloadCSV();
-                downloadStepsZip(); 
-            }
-        }
-    }
-    
     function checkAndTriggerAIMove() {
         if ((gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) && !isGameOver() && !isAnimating) {
             
             if (!isBatchRunning) {
                 canvas.style.pointerEvents = 'none';
-                actionBar.classList.add('hidden');
+                if(actionBar) actionBar.classList.add('hidden');
                 
-                aiThinkingIndicator.classList.remove('hidden');
+                if(aiThinkingIndicator) aiThinkingIndicator.classList.remove('hidden');
             }
             
             const gameState = {
@@ -895,12 +852,12 @@ document.addEventListener('DOMContentLoaded', () => {
             let difficulty;
             if (gameMode === 'cvc') {
                 if (currentPlayer === 1) {
-                    difficulty = ai1DifficultySelect.value;
+                    difficulty = ai1DifficultySelect ? ai1DifficultySelect.value : 'minimax';
                 } else {
-                    difficulty = ai2DifficultySelect.value;
+                    difficulty = ai2DifficultySelect ? ai2DifficultySelect.value : 'minimax';
                 }
             } else if (gameMode === 'pvc') {
-                difficulty = ai2DifficultySelect.value;
+                difficulty = ai2DifficultySelect ? ai2DifficultySelect.value : 'minimax';
             }
 
             const settings = {
@@ -917,7 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else {
                 console.error("AI Worker 尚未初始化!");
-                if (!isBatchRunning) aiThinkingIndicator.classList.add('hidden');
+                if (!isBatchRunning && aiThinkingIndicator) aiThinkingIndicator.classList.add('hidden');
             }
             
         } else {
@@ -934,7 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        aiThinkingIndicator.classList.remove('hidden');
+        if(aiThinkingIndicator) aiThinkingIndicator.classList.remove('hidden');
         
         const gameState = {
             lines: JSON.parse(JSON.stringify(lines)),
@@ -959,8 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-    hintButton.addEventListener('click', requestHint);
-
+    if(hintButton) hintButton.addEventListener('click', requestHint);
 
     function executeAIMove(dotA, dotB) {
         if (!isValidLine(dotA, dotB)) {
@@ -1039,6 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('錯誤：JSZip 庫未載入。無法執行批次處理。');
             return;
         }
+        if(!batchGamesInput) return;
 
         const games = parseInt(batchGamesInput.value, 10);
         if (isNaN(games) || games <= 0 || games > 1000) {
@@ -1052,10 +1009,10 @@ document.addEventListener('DOMContentLoaded', () => {
         batchZip = new JSZip();
 
         document.body.classList.add('batch-running');
-        batchStatus.classList.remove('hidden');
-        progressBarInner.style.width = '0%';
+        if(batchStatus) batchStatus.classList.remove('hidden');
+        if(progressBarInner) progressBarInner.style.width = '0%';
         
-        gameOverMessage.classList.add('hidden');
+        if(gameOverMessage) gameOverMessage.classList.add('hidden');
 
         initGame();
     }
@@ -1064,8 +1021,8 @@ document.addEventListener('DOMContentLoaded', () => {
         isBatchRunning = false;
         
         document.body.classList.remove('batch-running');
-        batchStatus.classList.add('hidden');
-        progressBarInner.style.width = '0%';
+        if(batchStatus) batchStatus.classList.add('hidden');
+        if(progressBarInner) progressBarInner.style.width = '0%';
 
         if (downloadPartial && batchZip) {
             console.log("下載部分結果...");
@@ -1133,18 +1090,39 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
+
+    // --- 綁定所有事件 ---
+    if(canvas) {
+        canvas.addEventListener('click', handleCanvasClick);
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            handleCanvasClick(e);
+        });
+    }
+    
+    if(resetButton) resetButton.addEventListener('click', initGame);
+    
+    if(exportPngButton) exportPngButton.addEventListener('click', downloadPNG);
+    if(exportCsvButton) exportCsvButton.addEventListener('click', downloadCSV);
+    
+    if(confirmLineButton) confirmLineButton.addEventListener('click', confirmLine);
+    if(cancelLineButton) cancelLineButton.addEventListener('click', cancelLine);
+    
     function handleGameModeChange() {
+        if(!gameModeSelect) return;
         gameMode = gameModeSelect.value;
         
-        if (gameMode === 'pvp') {
-             ai1DifficultySelect.disabled = true;
-             ai2DifficultySelect.disabled = true;
-        } else if (gameMode === 'pvc') {
-             ai1DifficultySelect.disabled = true;
-             ai2DifficultySelect.disabled = false;
-        } else { 
-             ai1DifficultySelect.disabled = false;
-             ai2DifficultySelect.disabled = false;
+        if (ai1DifficultySelect && ai2DifficultySelect) {
+            if (gameMode === 'pvp') {
+                 ai1DifficultySelect.disabled = true;
+                 ai2DifficultySelect.disabled = true;
+            } else if (gameMode === 'pvc') {
+                 ai1DifficultySelect.disabled = true;
+                 ai2DifficultySelect.disabled = false;
+            } else { 
+                 ai1DifficultySelect.disabled = false;
+                 ai2DifficultySelect.disabled = false;
+            }
         }
 
         updateUI();
@@ -1152,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkAndTriggerAIMove();
         }
     }
-    gameModeSelect.addEventListener('change', handleGameModeChange);
+    if(gameModeSelect) gameModeSelect.addEventListener('change', handleGameModeChange);
     
     if (boardRowsInput) {
         boardRowsInput.addEventListener('change', initGame);
@@ -1172,12 +1150,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (startPlayerSelect) {
         startPlayerSelect.addEventListener('change', initGame);
     }
-    ai1DifficultySelect.addEventListener('change', () => {});
-    ai2DifficultySelect.addEventListener('change', () => {});
+    if(ai1DifficultySelect) ai1DifficultySelect.addEventListener('change', () => {});
+    if(ai2DifficultySelect) ai2DifficultySelect.addEventListener('change', () => {});
 
 
-    startBatchButton.addEventListener('click', startBatchProcess);
-    stopBatchButton.addEventListener('click', () => {
+    if(startBatchButton) startBatchButton.addEventListener('click', startBatchProcess);
+    if(stopBatchButton) stopBatchButton.addEventListener('click', () => {
         if (confirm('您確定要停止批次處理嗎？目前已完成的結果將會被打包下載。')) {
             stopBatchProcess(true);
         }
