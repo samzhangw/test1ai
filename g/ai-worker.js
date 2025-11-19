@@ -1,7 +1,6 @@
 /**
  * ============================================
- * AI Web Worker (ai-worker.js)
- * * 包含所有 AI 運算邏輯
+ * AI Web Worker (ai-worker.js) - 終極修正版
  * ============================================
  */
 
@@ -23,15 +22,14 @@ let aiDots = [];
 let transpositionTable = new Map();
 let ttHits = 0; 
 
-// 搜尋深度與時間限制
 const MAX_SEARCH_DEPTH = 30; 
 const TIME_LIMIT_MS = 2500;
 
-// 評估分數權重
-const HEURISTIC_WIN_SCORE = 1000000;
-const HEURISTIC_SQUARE_VALUE = 1000;
-const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; // 3邊格的價值 (吃掉它很好，留給對手很壞)
-const HEURISTIC_MINOR_MOVE_PENALTY = 150;    // 2邊格的懲罰 (下了會送分)
+// 評估分數權重 (調高得分價值，確保 AI 貪婪)
+const HEURISTIC_WIN_SCORE = 10000000;
+const HEURISTIC_SQUARE_VALUE = 5000;       // 得一分 +5000
+const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; // 製造3邊格 (好機會) +800
+const HEURISTIC_MINOR_MOVE_PENALTY = 200;    // 製造2邊格 (送分險) -200
 
 // --- Web Worker 入口 ---
 self.onmessage = function (e) {
@@ -46,7 +44,6 @@ self.onmessage = function (e) {
     scoreAndGoRule = settings.scoreAndGo;
     maxLineLength = settings.maxLineLength;
     
-    // 取得棋盤尺寸並產生 aiDots
     gridRows = gameState.gridRows;
     gridCols = gameState.gridCols;
     aiDots = [];
@@ -62,11 +59,10 @@ self.onmessage = function (e) {
 
     // 2. 決定 AI 策略
     const availableMoves = getAvailableMoves();
-    const difficulty = settings.difficulty || 'minimax'; // 預設為智能
+    const difficulty = settings.difficulty || 'minimax'; 
     
     let bestMove;
 
-    // 【策略選擇邏輯】
     if (difficulty === 'greedy') {
         // 簡單模式：只用貪婪啟發式
         bestMove = findBestMoveHeuristic(availableMoves);
@@ -88,7 +84,7 @@ self.onmessage = function (e) {
 };
 
 /**
- * 策略 1: 淺層啟發式搜尋 (1-ply) - 簡單模式用
+ * 策略 1: 淺層啟發式搜尋 (簡單模式)
  */
 function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = aiSquares) {
     if (availableMoves.length === 0) return null;
@@ -98,15 +94,13 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     let minorUnsafeMoves = [];
     let criticalUnsafeMoves = [];
     
-    // 1. 評估所有 "dot-pair" 移動
     for (const move of availableMoves) {
         let squaresCompleted = 0;
-        let isCritical = false; // 會製造出 3 邊
-        let isMinor = false;    // 會製造出 2 邊
+        let isCritical = false; 
+        let isMinor = false;    
         
         let uniqueAdjacentSquares = new Set();
 
-        // 檢查此 move 包含的所有 segments
         for (const segment of move.segments) {
             const adjacentSquares = getAdjacentSquares(segment.id, squaresObj);
             adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
@@ -114,8 +108,6 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
 
         for (const sq of uniqueAdjacentSquares) {
             if (sq.filled) continue;
-            
-            // 模擬畫上 *所有* segments 後的狀態
             let sidesAfterMove = 0;
             sq.lineKeys.forEach(key => {
                 if (linesObj[key].players.length > 0) {
@@ -125,13 +117,9 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
                 }
             });
 
-            if (sidesAfterMove === 4) {
-                squaresCompleted++;
-            } else if (sidesAfterMove === 3) {
-                isCritical = true;
-            } else if (sidesAfterMove === 2) {
-                isMinor = true;
-            }
+            if (sidesAfterMove === 4) squaresCompleted++;
+            else if (sidesAfterMove === 3) isCritical = true;
+            else if (sidesAfterMove === 2) isMinor = true;
         }
         
         const moveInfo = { move, squaresCompleted, isCritical, isMinor };
@@ -144,7 +132,6 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     
     let bestDotMove;
     
-    // 2. 根據優先級選擇 (隨機性增加變化)
     if (winningMoves.length > 0) {
         const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
         const bestWinningMoves = winningMoves.filter(m => m.squaresCompleted === maxScore);
@@ -161,22 +148,19 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
         
     } else if (availableMoves.length > 0) {
         bestDotMove = availableMoves[0];
-    } else {
-        return null; 
     }
-
-    if (!bestDotMove) return null;
-    return { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB };
+    
+    return bestDotMove ? { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB } : null;
 }
 
-// --- 策略 2: Minimax (迭代加深版) - 智能模式用 ---
+// --- 策略 2: Minimax (迭代加深版) ---
 function findBestMoveMinimaxIterative(availableMoves) {
     const startTime = performance.now();
     let maxDepth = Math.min(MAX_SEARCH_DEPTH, availableMoves.length);
     
     let overallBestMove = null; 
     
-    // 1. 迭代加深迴圈
+    // 1. 迭代加深
     for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
         
         if (currentDepth > 1 && (performance.now() - startTime > TIME_LIMIT_MS)) {
@@ -189,25 +173,26 @@ function findBestMoveMinimaxIterative(availableMoves) {
         const linesCopy = deepCopy(aiLines);
         const squaresCopy = deepCopy(aiSquares);
         const scoresCopy = deepCopy(aiScores);
+        
+        // 【重要修正】：永遠排序！確保得分步最先被計算，避免超時沒算到
         const sortedMoves = sortMovesForMinimax(availableMoves, linesCopy, squaresCopy);
 
         // 2. 根節點移動迴圈
         for (const move of sortedMoves) { 
             
             if (performance.now() - startTime > TIME_LIMIT_MS) {
-                break;
+                // 如果已經找到至少一個可行解，就不要完全中斷，保留目前的最佳解
+                if (currentBestMovesForThisDepth.length > 0) break;
             }
 
             const undoData = makeMove(move.segments, playerAINumber, linesCopy, squaresCopy, scoresCopy);
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                // 【修正重點 1】：根節點得分後，AI 繼續下。
-                // 這裡不需要反轉分數，也不用交換 alpha/beta (因為還是 AI 的回合)
-                // 傳入 true 表示 isMaxPlayer 依然是 true
+                // 根節點得分：AI 繼續下，保持 Max 視角，不反轉分數
                 score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime); 
             } else {
-                // 沒得分換對手，這時才需要反轉分數
+                // 沒得分：換對手，反轉分數
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
             
@@ -221,24 +206,15 @@ function findBestMoveMinimaxIterative(availableMoves) {
             }
         } 
 
-        if (performance.now() - startTime > TIME_LIMIT_MS) {
-            break;
-        }
-
         if (currentBestMovesForThisDepth.length > 0) {
             overallBestMove = currentBestMovesForThisDepth[Math.floor(Math.random() * currentBestMovesForThisDepth.length)];
-        } else {
-             break; 
         }
     } 
 
     if (!overallBestMove) {
         const heuristicMove = findBestMoveHeuristic(availableMoves);
         if (heuristicMove) return heuristicMove;
-        
-        if (availableMoves.length > 0) {
-            return { dotA: availableMoves[0].dotA, dotB: availableMoves[0].dotB };
-        }
+        if (availableMoves.length > 0) return { dotA: availableMoves[0].dotA, dotB: availableMoves[0].dotB };
         return null;
     }
 
@@ -246,7 +222,7 @@ function findBestMoveMinimaxIterative(availableMoves) {
 }
 
 /**
- * Minimax 核心函式 (修正版)
+ * Minimax 核心函式
  */
 function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState, startTime) {
     
@@ -254,7 +230,6 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
 
-    // 1. 置換表
     const boardHash = getBoardHash(linesState);
     if (transpositionTable.has(boardHash)) {
         const cached = transpositionTable.get(boardHash);
@@ -264,15 +239,14 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         }
     }
 
-    // 2. 終止條件
     const availableMoves = getAvailableMoves(linesState); 
     if (depth === 0 || availableMoves.length === 0) {
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
 
-    // 3. 遞迴搜尋
     let bestValue = -Infinity; 
-    const sortedMoves = (depth > 4) ? sortMovesForMinimax(availableMoves, linesState, squaresState) : availableMoves;
+    // 【重要】：遞迴中也總是排序，讓 Alpha-Beta 剪枝發揮最大效用
+    const sortedMoves = sortMovesForMinimax(availableMoves, linesState, squaresState);
 
     for (const move of sortedMoves) { 
         const currentPlayerToMove = isMaxPlayer ? playerAINumber : playerOpponentNumber;
@@ -281,13 +255,10 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
-            // 【修正重點 2】：遞迴中的得分邏輯
-            // AI 得分 -> 繼續是 AI 回合 -> 繼續最大化 AI 分數 -> 不反轉
-            // 對手得分 -> 繼續是對手回合 -> 繼續最大化對手分數 (對 AI 來說是最小化) -> 不反轉
-            // 因此，當 scoredCount > 0，我們直接遞迴，不加負號，不交換 alpha/beta
+            // 得分：同玩家繼續，不反轉
             value = minimax(depth, alpha, beta, isMaxPlayer, true, linesState, squaresState, scoresState, startTime);
         } else {
-            // 沒得分 -> 換人 -> NegaMax 標準反轉邏輯
+            // 換人：反轉
             value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
         }
 
@@ -297,64 +268,40 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         alpha = Math.max(alpha, bestValue);
 
         if (alpha >= beta) {
-            break; // Beta Cutoff
+            break; 
         }
     }
     
-    // 4. 存入置換表
     transpositionTable.set(boardHash, { score: bestValue, depth: depth });
-
     return bestValue;
 }
 
-// 評估函式 (修正版)
+// 評估函式
 function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     const myScore = isMaxPlayer ? scoresState[playerAINumber] : scoresState[playerOpponentNumber];
     const oppScore = isMaxPlayer ? scoresState[playerOpponentNumber] : scoresState[playerAINumber];
     let heuristicScore = (myScore - oppScore) * HEURISTIC_SQUARE_VALUE;
     
-    // 如果遊戲結束，給予絕對勝利分數
     if (myScore + oppScore === squaresState.length) {
          return heuristicScore + (myScore > oppScore ? HEURISTIC_WIN_SCORE : -HEURISTIC_WIN_SCORE);
     }
-    
-    let safeMoves = 0;
-    let minorUnsafeMoves = 0;
-    let criticalUnsafeMoves = []; 
     
     for (const sq of squaresState) {
         if (sq.filled) continue;
         const sides = getSidesDrawn(sq, linesState);
         if (sides === 3) {
-            // 【修正重點 3】：3邊格的價值
-            // 3邊格意味著當前玩家 (isMaxPlayer) 可以吃掉它。
-            // 所以這對當前玩家是「加分」。
-            // 這裡加上 HEURISTIC_CRITICAL_MOVE_PENALTY (800) 是正確的，代表這是一個好機會。
+            // 3邊格：對當前玩家是極好的機會 (+800)
             heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; 
-            
-            // 我們記錄下來，但不應該在後面把它當作「連鎖反應的損失」扣掉
-            const criticalLineId = sq.lineKeys.find(key => linesState[key].players.length === 0);
-            if (criticalLineId) criticalUnsafeMoves.push(criticalLineId);
-
         } else if (sides === 2) {
-            // 2邊格是危險的 (下了變 3 邊給對手)
+            // 2邊格：對當前玩家是壞事 (-200)
             heuristicScore -= HEURISTIC_MINOR_MOVE_PENALTY;
-            minorUnsafeMoves++;
-        } else {
-            safeMoves++;
         }
     }
     
-    // 【修正重點 4】：移除了錯誤的「連鎖反應扣分」
-    // 原本的代碼在這裡會計算 minChain 並從分數中「扣除」。
-    // 這導致 AI 在發現自己可以吃掉一整條龍時，反而覺得分數會大減，因此不敢去吃。
-    // 我們移除了那個區塊，讓 AI 根據基本的 (得分 * 1000 + 800) 來貪婪地吃分。
-
     return heuristicScore;
 }
 
-
-// 排序函式
+// 排序函式 (O(N) 複雜度，很快)
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { 
         let priority = 0;
@@ -370,26 +317,22 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
             
             let sidesAfterMove = 0;
             sq.lineKeys.forEach(key => {
-                if (linesState[key].players.length > 0) {
-                    sidesAfterMove++;
-                } 
-                else if (move.segments.some(seg => seg.id === key)) {
-                    sidesAfterMove++;
-                }
+                if (linesState[key].players.length > 0) sidesAfterMove++;
+                else if (move.segments.some(seg => seg.id === key)) sidesAfterMove++;
             });
             
             if (sidesAfterMove === 4) {
-                priority += 10000; // 能得分最高優先
+                priority += 100000; // 絕對優先：能得分
             } else if (sidesAfterMove === 3) {
-                priority -= 100;   // 給對手製造得分機會最低優先
+                priority -= 1000;   // 絕對避免：送分給對手
             } else if (sidesAfterMove === 2) {
-                priority -= 10;    // 製造 2 邊次低優先
+                priority -= 50;     // 盡量避免：製造2邊
             } else {
-                priority += 1;     // 安全步
+                priority += 10;     // 普通安全步
             }
         }
         
-        // 優先選沒人畫過的線
+        // 小優化：優先畫空白區域
         if (move.segments.every(seg => seg.players.length === 0)) {
              priority += 5;
         }
@@ -399,12 +342,10 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
       .map(item => item.move);
 }
 
-
-// --- 遊戲狀態模擬函式 (Worker 內部) ---
+// --- 輔助函式 (保持不變) ---
 
 function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
     const moves = [];
-    
     if (lineLength === 1) {
         for (const id in linesObj) {
             if (linesObj[id].players.length === 0) {
@@ -412,12 +353,10 @@ function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, c
                 moves.push({ dotA: seg.p1, dotB: seg.p2, segments: [seg] });
             }
         }
-        
     } else {
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 const dotA = dots[r][c];
-
                 if (c + lineLength < cols) {
                     const dotB = dots[r][c + lineLength];
                     const segments = getSegmentsForLine(dotA, dotB, linesObj);
@@ -425,7 +364,6 @@ function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, c
                         moves.push({ dotA, dotB, segments });
                     }
                 }
-                
                 if (r + lineLength < rows) {
                     const dotB = dots[r + lineLength][c];
                     const segments = getSegmentsForLine(dotA, dotB, linesObj);
@@ -442,9 +380,7 @@ function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, c
 function getSidesDrawn(square, linesObj = aiLines) {
     let sides = 0;
     for (const key of square.lineKeys) {
-        if (linesObj[key] && linesObj[key].players.length > 0) {
-            sides++;
-        }
+        if (linesObj[key] && linesObj[key].players.length > 0) sides++;
     }
     return sides;
 }
@@ -469,19 +405,15 @@ function makeMove(moveSegments, player, linesState, squaresState, scoresState) {
         filledSquares: [], 
         segmentsChanged: []  
     };
-
     let uniqueAdjacentSquares = new Set();
-
     for (const segment of moveSegments) {
         if (!linesState[segment.id].players.includes(player)) {
             linesState[segment.id].players.push(player);
             undoData.segmentsChanged.push(segment.id); 
         }
-        
         const adjacentSquares = getAdjacentSquares(segment.id, squaresState);
         adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
     }
-
     for (const sq of uniqueAdjacentSquares) {
         if (!sq.filled) {
             const sides = getSidesDrawn(sq, linesState);
@@ -494,20 +426,15 @@ function makeMove(moveSegments, player, linesState, squaresState, scoresState) {
             }
         }
     }
-    
     return undoData;
 }
 
 function undoMove(undoData, linesState, squaresState, scoresState) {
     const player = undoData.player;
-    
     for (const segmentId of undoData.segmentsChanged) {
         const pIndex = linesState[segmentId].players.indexOf(player);
-        if (pIndex > -1) {
-            linesState[segmentId].players.splice(pIndex, 1);
-        }
+        if (pIndex > -1) linesState[segmentId].players.splice(pIndex, 1);
     }
-    
     if (undoData.scoredCount > 0) {
         for (const sq of undoData.filledSquares) {
             const stateSquare = squaresState.find(s => s.lineKeys[0] === sq.lineKeys[0] && s.lineKeys[1] === sq.lineKeys[1]);
@@ -526,31 +453,19 @@ function getSegmentsForLine(dotA, dotB, linesObj = aiLines) {
     const dc = Math.sign(dotB.c - dotA.c);
     let r = dotA.r;
     let c = dotA.c;
-    
-    if (dr !== 0 && dc !== 0) {
-        return [];
-    }
-
+    if (dr !== 0 && dc !== 0) return [];
     while (r !== dotB.r || c !== dotB.c) {
         let next_r = r + dr;
         let next_c = c + dc;
         let segmentId = null;
-
-        if (dr === 0) { 
-            segmentId = `H_${r},${Math.min(c, next_c)}`;
-        } else if (dc === 0) { 
-            segmentId = `V_${Math.min(r, next_r)},${c}`;
-        }
-
-        if (segmentId && linesObj[segmentId]) {
-            segments.push(linesObj[segmentId]);
-        }
+        if (dr === 0) segmentId = `H_${r},${Math.min(c, next_c)}`;
+        else if (dc === 0) segmentId = `V_${Math.min(r, next_r)},${c}`;
+        if (segmentId && linesObj[segmentId]) segments.push(linesObj[segmentId]);
         r = next_r;
         c = next_c;
     }
     return segments;
 }
-
 
 function deepCopy(obj) {
     return JSON.parse(JSON.stringify(obj));
