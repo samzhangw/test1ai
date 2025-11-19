@@ -15,20 +15,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiThinkingIndicator = document.getElementById('ai-thinking-indicator');
     
     const gameModeSelect = document.getElementById('game-mode');
-    const startPlayerSelect = document.getElementById('start-player'); // 【修改】 1. 取得新元素
+    const startPlayerSelect = document.getElementById('start-player');
     const boardRowsInput = document.getElementById('board-rows');
     const boardColsInput = document.getElementById('board-cols');
     const lineLengthInput = document.getElementById('line-length');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
+    
+    // 【新增】AI 難度選擇
+    const aiDifficultySelect = document.getElementById('ai-difficulty');
 
-    // 【新增】批次處理 UI 元素
+    // 批次處理 UI 元素
     const batchControls = document.getElementById('batch-controls');
     const startBatchButton = document.getElementById('start-batch-button');
     const stopBatchButton = document.getElementById('stop-batch-button');
     const batchGamesInput = document.getElementById('batch-games-input');
     const batchStatus = document.getElementById('batch-status');
     const progressBarInner = document.getElementById('progress-bar-inner');
-    const gameControls = document.getElementById('game-controls');
 
     // AI Web Worker
     let aiWorker;
@@ -49,17 +51,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const DOT_SPACING = 100;
     const PADDING = 50;
     
-    // 【修改】為了顯示數字，將點的半徑和點擊範圍調大
-    const DOT_RADIUS = 12; // (原為 6)
+    const DOT_RADIUS = 10; 
     const LINE_WIDTH = 8;
-    const CLICK_TOLERANCE_DOT = 18; // (原為 15)
+    const CLICK_TOLERANCE_DOT = 20;
 
-    // 玩家顏色
+    // 配色方案：Modern Frost Light Theme
     const PLAYER_COLORS = {
-        1: { line: '#3b82f6', fill: 'rgba(59, 130, 246, 0.3)' },
-        2: { line: '#ef4444', fill: 'rgba(239, 68, 68, 0.3)' },
+        1: { line: '#3b82f6', fill: 'rgba(59, 130, 246, 0.2)', text: '#2563eb' },
+        2: { line: '#f43f5e', fill: 'rgba(244, 63, 94, 0.2)', text: '#e11d48' },
     };
-    const DEFAULT_LINE_COLOR = '#bbbbbb';
+    
+    const DEFAULT_LINE_COLOR = '#cbd5e1';
+    const DOT_COLOR = '#475569';
+    const DOT_TEXT_COLOR = '#ffffff';
 
     // 遊戲狀態
     let currentPlayer = 1;
@@ -78,12 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let turnCounter = 1;
 
     // 動畫相關變數
-    let ANIMATION_DURATION = 500; // 【修改】從 const 改為 let
+    let ANIMATION_DURATION = 500;
     let animationStartTime = 0;
     let isAnimating = false;
     let currentDotRadius = DOT_RADIUS;
 
-    // 【新增】批次處理狀態
+    // 批次處理狀態
     let batchZip;
     let isBatchRunning = false;
     let totalGamesToRun = 0;
@@ -125,18 +129,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function initGame() {
         if (isBatchRunning) {
-            // 批次模式: 強制設定並跳過動畫
             gameMode = 'cvc';
             gameModeSelect.value = 'cvc';
-            ANIMATION_DURATION = 0; // 跳過動畫
+            ANIMATION_DURATION = 0; 
             
-            // 更新狀態
             const percent = (Math.max(0, currentGameNumber - 1) / totalGamesToRun) * 100;
-            batchStatus.querySelector('p').textContent = `處理中... (遊戲 ${currentGameNumber} / ${totalGamesToRun})`;
+            const percentText = document.getElementById('percent-text');
+            if(percentText) percentText.textContent = Math.round(percent) + '%';
             progressBarInner.style.width = `${percent}%`;
 
         } else {
-            // 正常模式: 讀取 UI
             gameMode = gameModeSelect.value;
             ANIMATION_DURATION = 500;
         }
@@ -162,17 +164,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
         
-        // 【修改】 2. 根據新選單設定 currentPlayer
         const startPlayerSetting = (startPlayerSelect && startPlayerSelect.value) ? startPlayerSelect.value : 'random';
         
         if (startPlayerSetting === 'player1') {
             currentPlayer = 1;
         } else if (startPlayerSetting === 'player2') {
             currentPlayer = 2;
-        } else { // 'random'
+        } else { 
             currentPlayer = Math.random() < 0.5 ? 1 : 2;
         }
-        // 【修改結束】
 
         scores = { 1: 0, 2: 0 };
         dots = [];
@@ -186,16 +186,11 @@ document.addEventListener('DOMContentLoaded', () => {
         moveHistory = [];
         turnCounter = 1;
 
-        // 【修改】為點分配 1-4 的數字 (固定順時針)
-        // 建立 2x2 查找表
-        // (r,c) = 1, (r,c+1) = 2
-        // (r+1,c) = 4, (r+1,c+1) = 3
         const numKey = [
-            [1, 2], // 對應 r % 2 == 0
-            [4, 3]  // 對應 r % 2 == 1
+            [1, 2], 
+            [4, 3] 
         ];
 
-        // 1. 產生點
         for (let r = 0; r < gridRows; r++) {
             dots[r] = [];
             for (let c = 0; c < gridCols; c++) {
@@ -203,12 +198,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     x: c * DOT_SPACING + PADDING,
                     y: r * DOT_SPACING + PADDING,
                     r: r, c: c,
-                    number: numKey[r % 2][c % 2] // 【修改】分配固定的數字
+                    number: numKey[r % 2][c % 2] 
                 };
             }
         }
 
-        // 2. 產生線段
         lines = {};
         for (let r = 0; r < gridRows; r++) {
             for (let c = 0; c < gridCols; c++) {
@@ -223,7 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 3. 產生正方形
         squares = [];
         for (let r = 0; r < gridRows - 1; r++) {
             for (let c = 0; c < gridCols - 1; c++) {
@@ -251,21 +244,17 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.style.pointerEvents = 'none';
         
         if (isBatchRunning || ANIMATION_DURATION === 0) {
-            // 【修改】批次模式: 跳過動畫
             isAnimating = false;
             currentDotRadius = DOT_RADIUS;
-            drawCanvasInternal(); // 直接畫最終畫面
-            // 手動觸發 AI
+            drawCanvasInternal(); 
             if (gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) {
                  checkAndTriggerAIMove();
             }
         } else {
-            // 正常模式: 播放動畫
             requestAnimationFrame(animationLoop);
         }
     }
     
-    // 遊戲開始動畫迴圈
     function animationLoop(timestamp) {
         if (animationStartTime === 0) {
             animationStartTime = timestamp;
@@ -294,25 +283,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // drawCanvas 的包裝函式
     function drawCanvas() {
         if (isAnimating) return; 
         currentDotRadius = DOT_RADIUS; 
         drawCanvasInternal();
     }
 
-    // 內部繪製函式
     function drawCanvasInternal() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. 繪製已完成的正方形 (填色)
         squares.forEach(sq => {
             if (sq.filled) {
                 ctx.fillStyle = PLAYER_COLORS[sq.player].fill;
-                ctx.fillRect(sq.x, sq.y, sq.size, sq.size);
+                const radius = 16; 
+                ctx.beginPath();
+                ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
+                ctx.fill();
                 
-                ctx.fillStyle = PLAYER_COLORS[sq.player].line;
-                ctx.font = 'bold 48px var(--font-main, sans-serif)';
+                ctx.fillStyle = PLAYER_COLORS[sq.player].text;
+                ctx.font = 'bold 36px "Space Grotesk", sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
@@ -320,16 +309,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (gameMode === 'cvc') {
                     playerLabel = (sq.player === 1) ? "C1" : "C2";
                 } else if (gameMode === 'pvc') {
-                    playerLabel = (sq.player === 1) ? "1" : "C";
+                    playerLabel = (sq.player === 1) ? "P1" : "AI";
                 } else {
-                    playerLabel = sq.player;
+                    playerLabel = "P" + sq.player;
                 }
                 
-                ctx.fillText(playerLabel, sq.x + sq.size / 2, sq.y + sq.size / 2 + 5);
+                ctx.fillText(playerLabel, sq.x + sq.size / 2, sq.y + sq.size / 2);
             }
         });
 
-        // 2. 繪製所有線條 (H 和 V)
         for (const id in lines) {
             const line = lines[id];
             
@@ -342,83 +330,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.lineTo(line.p2.x, line.p2.y);
                 ctx.strokeStyle = DEFAULT_LINE_COLOR;
                 ctx.lineWidth = 2;
-                ctx.setLineDash([2, 4]);
+                ctx.setLineDash([4, 8]);
                 ctx.stroke();
-            } else if (hasP1 && !hasP2) {
-                ctx.beginPath();
-                ctx.moveTo(line.p1.x, line.p1.y);
-                ctx.lineTo(line.p2.x, line.p2.y);
-                ctx.strokeStyle = PLAYER_COLORS[1].line;
+            } 
+            else {
+                ctx.setLineDash([]);
+                ctx.lineCap = 'round';
                 ctx.lineWidth = LINE_WIDTH;
-                ctx.stroke();
-            } else if (!hasP1 && hasP2) {
-                ctx.beginPath();
-                ctx.moveTo(line.p1.x, line.p1.y);
-                ctx.lineTo(line.p2.x, line.p2.y);
-                ctx.strokeStyle = PLAYER_COLORS[2].line;
-                ctx.lineWidth = LINE_WIDTH;
-                ctx.stroke();
-            } else if (hasP1 && hasP2) {
-                let dx = line.p2.x - line.p1.x;
-                let dy = line.p2.y - line.p1.y;
-                const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-                const norm_x = -dy / len;
-                const norm_y = dx / len;
-                const offsetX = norm_x * (LINE_WIDTH / 4);
-                const offsetY = norm_y * (LINE_WIDTH / 4);
-                const halfWidth = LINE_WIDTH / 2;
-                ctx.beginPath();
-                ctx.moveTo(line.p1.x - offsetX, line.p1.y - offsetY);
-                ctx.lineTo(line.p2.x - offsetX, line.p2.y - offsetY);
-                ctx.strokeStyle = PLAYER_COLORS[1].line;
-                ctx.lineWidth = halfWidth;
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(line.p1.x + offsetX, line.p1.y + offsetY);
-                ctx.lineTo(line.p2.x + offsetX, line.p2.y + offsetY);
-                ctx.strokeStyle = PLAYER_COLORS[2].line;
-                ctx.lineWidth = halfWidth;
-                ctx.stroke();
+
+                if (hasP1 && !hasP2) {
+                    ctx.beginPath();
+                    ctx.moveTo(line.p1.x, line.p1.y);
+                    ctx.lineTo(line.p2.x, line.p2.y);
+                    ctx.strokeStyle = PLAYER_COLORS[1].line;
+                    ctx.stroke();
+                } else if (!hasP1 && hasP2) {
+                    ctx.beginPath();
+                    ctx.moveTo(line.p1.x, line.p1.y);
+                    ctx.lineTo(line.p2.x, line.p2.y);
+                    ctx.strokeStyle = PLAYER_COLORS[2].line;
+                    ctx.stroke();
+                } else if (hasP1 && hasP2) {
+                    let dx = line.p2.x - line.p1.x;
+                    let dy = line.p2.y - line.p1.y;
+                    const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+                    const norm_x = -dy / len;
+                    const norm_y = dx / len;
+                    const offset = LINE_WIDTH / 2 + 1;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(line.p1.x - norm_x * offset, line.p1.y - norm_y * offset);
+                    ctx.lineTo(line.p2.x - norm_x * offset, line.p2.y - norm_y * offset);
+                    ctx.strokeStyle = PLAYER_COLORS[1].line;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(line.p1.x + norm_x * offset, line.p1.y + norm_y * offset);
+                    ctx.lineTo(line.p2.x + norm_x * offset, line.p2.y + norm_y * offset);
+                    ctx.strokeStyle = PLAYER_COLORS[2].line;
+                    ctx.stroke();
+                }
             }
-            ctx.setLineDash([]);
         }
 
-        // 3. 繪製所有的點
         for (let r = 0; r < gridRows; r++) {
             for (let c = 0; c < gridCols; c++) {
                 ctx.beginPath();
                 ctx.arc(dots[r][c].x, dots[r][c].y, currentDotRadius, 0, 2 * Math.PI);
-                ctx.fillStyle = '#34495e';
+                ctx.fillStyle = DOT_COLOR;
                 ctx.fill();
 
-                // 【新增】繪製點上的數字
                 const dotNumber = dots[r][c].number;
                 if (dotNumber) {
-                    // 根據點的半徑動態調整字體大小
                     const fontSize = Math.max(8, Math.floor(currentDotRadius * 1.1)); 
-                    ctx.font = `bold ${fontSize}px var(--font-main, sans-serif)`;
-                    ctx.fillStyle = '#ffffff'; // 白色文字
+                    ctx.font = `bold ${fontSize}px var(--font-body, sans-serif)`;
+                    ctx.fillStyle = DOT_TEXT_COLOR; 
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    // 輕微 Y 軸偏移，使其在視覺上更置中
                     ctx.fillText(dotNumber, dots[r][c].x, dots[r][c].y + 1); 
                 }
             }
         }
         
-        // 4. 高亮顯示被選中的點
         [selectedDot1, selectedDot2].forEach(dot => {
             if (dot) {
                 ctx.beginPath();
-                ctx.arc(dot.x, dot.y, DOT_RADIUS + 3, 0, 2 * Math.PI);
+                ctx.arc(dot.x, dot.y, DOT_RADIUS + 6, 0, 2 * Math.PI);
                 ctx.strokeStyle = PLAYER_COLORS[currentPlayer].line;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 3]);
                 ctx.stroke();
+                ctx.setLineDash([]);
             }
         });
     }
 
-    // 點擊/觸控畫布
     function handleCanvasClick(e) {
         if (isAnimating || isBatchRunning || gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2) || !actionBar.classList.contains('hidden')) {
             return;
@@ -470,7 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
         drawCanvas();
     }
 
-    // "確認連線" 按鈕的函式
     function confirmLine() {
         if (!selectedDot1 || !selectedDot2) return;
         const dotA = selectedDot1;
@@ -554,7 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // "取消選取" 按鈕的函式
     function cancelLine() {
         selectedDot1 = null;
         selectedDot2 = null;
@@ -565,21 +549,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ----- 輔助函式 -----
 
-    /**
-     * 【重構】
-     * 產生 PNG 的 data URL (用於批次處理)
-     */
     function getCanvasAsPNGDataURL() {
         const originalRadius = currentDotRadius;
         const originalAnimating = isAnimating;
         
         isAnimating = false;
         currentDotRadius = DOT_RADIUS;
-        drawCanvasInternal(); // 強制繪製最終畫面
+        drawCanvasInternal(); 
 
         const dataUrl = canvas.toDataURL('image/png');
 
-        // 恢復原始狀態，避免閃爍 (如果不是在批次中)
         if (!isBatchRunning) {
             currentDotRadius = originalRadius;
             isAnimating = originalAnimating;
@@ -591,10 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return dataUrl;
     }
 
-    /**
-     * 【重構】
-     * 觸發單一 PNG 下載
-     */
     function downloadPNG() {
         const dataUrl = getCanvasAsPNGDataURL();
         const link = document.createElement('a');
@@ -605,10 +580,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
     }
     
-    /**
-     * 【重構】
-     * 產生 CSV 內容字串 (用於批次處理)
-     */
     function generateCSVString() {
         if (moveHistory.length === 0) {
             return null;
@@ -629,22 +600,15 @@ document.addEventListener('DOMContentLoaded', () => {
             csvContent += row + "\n";
         });
         
-        // 【新增】加入遊戲結果
         const winnerMessage = getWinnerMessage();
         csvContent += `\nResult,${winnerMessage}\n`;
         
         return csvContent;
     }
 
-    /**
-     * 【重構】
-     * 觸發單一 CSV 下載
-     */
     function downloadCSV() {
         const csvContent = generateCSVString();
         if (csvContent === null) {
-            // 【修改】 移除 alert，避免在自動下載時跳出
-            // alert("目前沒有任何對戰紀錄。"); 
             return;
         }
         
@@ -669,11 +633,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    /**
-     * 【修改】
-     * 記錄移動，並在批次模式下儲存每一步的 PNG
-     * 【修改 2】: 在「正常模式」下也儲存 PNG (到 moveHistory 物件中)
-     */
     function logMove(dotA, dotB, scored) {
         const moveData = {
             turn: turnCounter,
@@ -682,31 +641,26 @@ document.addEventListener('DOMContentLoaded', () => {
             scored: scored ? "Yes" : "No",
             scoreP1: scores[1],
             scoreP2: scores[2]
-            // pngBase64 將在下面添加
         };
-        moveHistory.push(moveData); // 先推入
+        moveHistory.push(moveData); 
 
-        // --- 【修改】 無論是否批次，都嘗試產生 PNG ---
         try {
             const pngDataURL = getCanvasAsPNGDataURL();
             const pngBase64 = pngDataURL.split(',')[1];
 
             if (pngBase64) {
                 if (isBatchRunning && batchZip) {
-                    // --- 批次模式: 存入 ZIP ---
                     const stepNumber = moveHistory.length;
                     const stepFileName = `step_${String(stepNumber).padStart(3, '0')}.png`;
                     batchZip.file(`game_${currentGameNumber}/steps/${stepFileName}`, pngBase64, { base64: true });
                 
                 } else if (!isBatchRunning) {
-                    // --- 正常模式: 存入 moveHistory 供稍後下載 ---
-                    moveData.pngBase64 = pngBase64; // 將 PNG 附加到剛剛推入的物件中
+                    moveData.pngBase64 = pngBase64; 
                 }
             }
         } catch (e) {
             console.error(`在遊戲 ${currentGameNumber} 步驟 ${moveHistory.length} 儲存 PNG 時發生錯誤:`, e);
         }
-        // --- 【修改結束】 ---
 
         if (!(scored && scoreAndGo)) {
              turnCounter++;
@@ -786,8 +740,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const player1Name = getPlayerName(1);
         const player2Name = getPlayerName(2);
         
-        player1ScoreBox.innerHTML = `${player1Name}: <span id="score1">${scores[1]}</span>`;
-        player2ScoreBox.innerHTML = `${player2Name}: <span id="score2">${scores[2]}</span>`;
+        player1ScoreBox.innerHTML = `<div class="p-label">${player1Name}</div><span>${scores[1]}</span>`;
+        player2ScoreBox.innerHTML = `<div class="p-label">${player2Name}</div><span>${scores[2]}</span>`;
 
         if (currentPlayer === 1) {
             player1ScoreBox.classList.add('active');
@@ -812,33 +766,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return winnerMessage;
     }
 
-    /**
-     * 【已修改】
-     * 遊戲結束函式
-     * 【修改】：在正常模式下自動下載 CSV 和 步驟PNG ZIP
-     */
     function endGame() {
         aiThinkingIndicator.classList.add('hidden');
         
         if (isBatchRunning) {
-            // --- 批次模式 ---
-            
-            // 1. 產生 CSV 內容
             const csvData = generateCSVString();
             if (csvData) {
                 batchZip.file(`game_${currentGameNumber}/history.csv`, "\uFEFF" + csvData);
             }
 
-            // 2. (每一步的 PNG 已經在 logMove 中儲存了)
-
-            // 3. 推進
             currentGameNumber++;
 
             if (currentGameNumber <= totalGamesToRun) {
-                // 執行下一場
-                setTimeout(initGame, 20); // 短暫延遲以釋放 UI 執行緒
+                setTimeout(initGame, 20); 
             } else {
-                // 全部完成了
                 batchStatus.querySelector('p').textContent = `已完成 ${totalGamesToRun} 場遊戲！`;
                 progressBarInner.style.width = `100%`;
                 downloadBatchZip();
@@ -846,28 +787,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
-            // --- 正常模式 ---
             const winnerMessage = getWinnerMessage();
             winnerText.textContent = winnerMessage;
             gameOverMessage.classList.remove('hidden');
             actionBar.classList.add('hidden');
             canvas.style.pointerEvents = 'auto';
 
-            // --- 【修改】 分出勝負時自動下載 CSV 和 PNG Zip ---
             if (moveHistory.length > 0) {
                 downloadCSV();
-                downloadStepsZip(); // 【新增】
+                downloadStepsZip(); 
             }
-            // --- 【修改結束】 ---
         }
     }
     
     // --- AI 相關函式 ---
 
-    /**
-     * 【已修改】
-     * 觸發 AI 運算，並顯示「運算中」
-     */
     function checkAndTriggerAIMove() {
         if ((gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) && !isGameOver() && !isAnimating) {
             
@@ -876,11 +810,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 actionBar.classList.add('hidden');
                 
                 aiThinkingIndicator.classList.remove('hidden');
-                if (currentPlayer === 2) {
-                    aiThinkingIndicator.classList.add('player2');
-                } else {
-                    aiThinkingIndicator.classList.remove('player2');
-                }
             }
             
             const gameState = {
@@ -892,9 +821,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridCols: gridCols
             };
             
+            // 【修改】將難度設定傳給 Worker
             const settings = {
                 scoreAndGo: scoreAndGo,
-                maxLineLength: maxLineLength
+                maxLineLength: maxLineLength,
+                difficulty: aiDifficultySelect.value // 傳遞難度
             };
 
             if (aiWorker) {
@@ -915,10 +846,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * 【保留】
-     * 執行 AI 移動 (由 Worker 觸發)
-     */
     function executeAIMove(dotA, dotB) {
         if (!isValidLine(dotA, dotB)) {
             console.warn("AI 嘗試繪製無效連線，已阻止");
@@ -978,20 +905,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (scoredThisTurn && scoreAndGo) {
-            checkAndTriggerAIMove(); // AI 得分，繼續
+            checkAndTriggerAIMove(); 
         } else {
             switchPlayer();
             if (gameMode === 'cvc') {
-                checkAndTriggerAIMove(); // CVC，換下一個 AI
+                checkAndTriggerAIMove(); 
             } else {
-                if (!isAnimating && !isBatchRunning) { // PVC，換玩家
+                if (!isAnimating && !isBatchRunning) { 
                     canvas.style.pointerEvents = 'auto';
                 }
             }
         }
     }
 
-    // --- 【新增】 批次處理函式 ---
+    // --- 批次處理函式 ---
 
     function startBatchProcess() {
         if (typeof JSZip === 'undefined') {
@@ -1010,22 +937,18 @@ document.addEventListener('DOMContentLoaded', () => {
         currentGameNumber = 1;
         batchZip = new JSZip();
 
-        // 鎖定 UI
         document.body.classList.add('batch-running');
         batchStatus.classList.remove('hidden');
         progressBarInner.style.width = '0%';
         
-        // 確保遊戲結束畫面是隱藏的
         gameOverMessage.classList.add('hidden');
 
-        // 開始第一場
         initGame();
     }
 
     function stopBatchProcess(downloadPartial = false) {
         isBatchRunning = false;
         
-        // 解鎖 UI
         document.body.classList.remove('batch-running');
         batchStatus.classList.add('hidden');
         progressBarInner.style.width = '0%';
@@ -1039,7 +962,6 @@ document.addEventListener('DOMContentLoaded', () => {
         totalGamesToRun = 0;
         currentGameNumber = 1;
 
-        // 重設遊戲到初始狀態
         setTimeout(initGame, 100);
     }
 
@@ -1060,29 +982,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    /**
-     * 【新增】
-     * 下載「單場」遊戲的所有步驟 PNG (打包成 ZIP)
-     */
     function downloadStepsZip() {
         if (typeof JSZip === 'undefined') {
             console.error('錯誤：JSZip 庫未載入。無法下載步驟 PNG。');
             return;
         }
-        // 檢查第一步是否有 pngBase64
         if (moveHistory.length === 0 || !moveHistory[0].pngBase64) {
             console.warn("沒有可下載的步驟 PNG (可能尚未儲存)。");
             return;
         }
 
         const zip = new JSZip();
-        const stepsFolder = zip.folder("steps"); // 在 zip 中建立一個 'steps' 資料夾
+        const stepsFolder = zip.folder("steps"); 
 
         moveHistory.forEach((move, index) => {
             if (move.pngBase64) {
                 const stepNumber = index + 1;
                 const stepFileName = `step_${String(stepNumber).padStart(3, '0')}.png`;
-                // 將 base64 存入 'steps' 資料夾
                 stepsFolder.file(stepFileName, move.pngBase64, { base64: true });
             }
         });
@@ -1113,13 +1029,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     resetButton.addEventListener('click', initGame);
     
-    // 【修改】
     exportPngButton.addEventListener('click', downloadPNG);
     exportCsvButton.addEventListener('click', downloadCSV);
     
     confirmLineButton.addEventListener('click', confirmLine);
     cancelLineButton.addEventListener('click', cancelLine);
-    gameModeSelect.addEventListener('change', initGame);
+    
+    function handleGameModeChange() {
+        gameMode = gameModeSelect.value;
+        updateUI();
+        if (!isGameOver()) {
+            checkAndTriggerAIMove();
+        }
+    }
+    gameModeSelect.addEventListener('change', handleGameModeChange);
     
     if (boardRowsInput) {
         boardRowsInput.addEventListener('change', initGame);
@@ -1136,20 +1059,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scoreAgainModeSelect) {
         scoreAgainModeSelect.addEventListener('change', initGame);
     }
-    
-    // 【修改】 3. 綁定新元素的事件
     if (startPlayerSelect) {
         startPlayerSelect.addEventListener('change', initGame);
     }
 
-    // 【新增】 批次處理事件
     startBatchButton.addEventListener('click', startBatchProcess);
     stopBatchButton.addEventListener('click', () => {
         if (confirm('您確定要停止批次處理嗎？目前已完成的結果將會被打包下載。')) {
-            stopBatchProcess(true); // true = 下載部分結果
+            stopBatchProcess(true);
         }
     });
 
-    // 啟動遊戲
     initGame();
 });
