@@ -7,7 +7,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="style.css">
 
@@ -15,18 +15,19 @@
 </head>
 <body>
 
-    <div class="bg-shape shape-1"></div>
-    <div class="bg-shape shape-2"></div>
-    <div class="bg-grid"></div>
+    <div class="bg-gradient-base"></div>
+    <div class="bg-blob blob-1"></div>
+    <div class="bg-blob blob-2"></div>
+    <div class="bg-grid-pattern"></div>
 
     <div id="main-container">
 
         <div id="game-column">
             
             <header>
-                <div class="badge">AI POWERED</div>
+                <div class="badge">AI POWERED v2.0</div>
                 <h1>DOTS & BOXES</h1>
-                <p class="subtitle">連結點陣 • 佔領格線 • 智取對手</p>
+                <p class="subtitle">連結點陣 • 封鎖象限 • 智取對手</p>
             </header>
 
             <div id="canvas-container">
@@ -35,7 +36,7 @@
                 <div id="ai-thinking-indicator" class="hidden">
                     <div class="loading-glass">
                         <div class="spinner"></div>
-                        <p>AI 正在思考中...</p>
+                        <p>AI 正在運算中...</p>
                     </div>
                 </div>
 
@@ -49,7 +50,7 @@
 
             <div id="action-bar" class="hidden">
                 <button id="confirm-line-button" class="btn primary shadow-effect">確認連線</button>
-                <button id="cancel-line-button" class="btn danger">取消</button>
+                <button id="cancel-line-button" class="btn danger">取消操作</button>
             </div>
         </div>
 
@@ -61,7 +62,7 @@
                         <div class="p-label">PLAYER 1</div>
                         <span id="score1">0</span>
                     </div>
-                    <div class="vs-divider">VS</div>
+                    <div class="vs-text">VS</div>
                     <div id="player2-score" class="score-box">
                         <div class="p-label">PLAYER 2</div>
                         <span id="score2">0</span>
@@ -72,7 +73,7 @@
                     <div class="win-rate-labels">
                         <span class="rate-p1">P1 優勢</span>
                         <span id="win-rate-value">50%</span>
-                        <span class="rate-p2">AI/P2 優勢</span>
+                        <span class="rate-p2">AI 優勢</span>
                     </div>
                     <div class="win-rate-bar-bg">
                         <div id="win-rate-bar-fill"></div>
@@ -175,7 +176,7 @@
 
                     <div id="batch-status" class="hidden">
                         <div class="status-header">
-                            <p>正在處理數據...</p>
+                            <p>數據處理中...</p>
                             <span id="percent-text">0%</span>
                         </div>
                         <div class="progress-bar">
