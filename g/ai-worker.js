@@ -23,14 +23,15 @@ let aiDots = [];
 let transpositionTable = new Map();
 let ttHits = 0; 
 
+// 搜尋深度與時間限制
 const MAX_SEARCH_DEPTH = 30; 
 const TIME_LIMIT_MS = 2500;
 
 // 評估分數權重
 const HEURISTIC_WIN_SCORE = 1000000;
 const HEURISTIC_SQUARE_VALUE = 1000;
-const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; 
-const HEURISTIC_MINOR_MOVE_PENALTY = 150; 
+const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; // 3邊格的價值 (吃掉它很好，留給對手很壞)
+const HEURISTIC_MINOR_MOVE_PENALTY = 150;    // 2邊格的懲罰 (下了會送分)
 
 // --- Web Worker 入口 ---
 self.onmessage = function (e) {
@@ -201,10 +202,12 @@ function findBestMoveMinimaxIterative(availableMoves) {
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                // 根節點：AI 得分後繼續下，不反轉分數，傳入 true 表示保持 AI 視角
+                // 【修正重點 1】：根節點得分後，AI 繼續下。
+                // 這裡不需要反轉分數，也不用交換 alpha/beta (因為還是 AI 的回合)
+                // 傳入 true 表示 isMaxPlayer 依然是 true
                 score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime); 
             } else {
-                // 根節點：沒得分換對手，反轉分數
+                // 沒得分換對手，這時才需要反轉分數
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
             
@@ -230,7 +233,6 @@ function findBestMoveMinimaxIterative(availableMoves) {
     } 
 
     if (!overallBestMove) {
-        // 萬一沒找到 (例如瞬間超時)，退回啟發式
         const heuristicMove = findBestMoveHeuristic(availableMoves);
         if (heuristicMove) return heuristicMove;
         
@@ -279,13 +281,13 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
-            // 【關鍵修正】：得分後繼續下，仍然是同一個玩家 (isMaxPlayer 不變)
-            // 因此不需要加負號，也不需要交換 alpha/beta
-            // 我們希望最大化「自己」在下一層的分數
+            // 【修正重點 2】：遞迴中的得分邏輯
+            // AI 得分 -> 繼續是 AI 回合 -> 繼續最大化 AI 分數 -> 不反轉
+            // 對手得分 -> 繼續是對手回合 -> 繼續最大化對手分數 (對 AI 來說是最小化) -> 不反轉
+            // 因此，當 scoredCount > 0，我們直接遞迴，不加負號，不交換 alpha/beta
             value = minimax(depth, alpha, beta, isMaxPlayer, true, linesState, squaresState, scoresState, startTime);
         } else {
-            // 沒得分，換對手下 (!isMaxPlayer)
-            // 標準 NegaMax：數值反轉，區間反轉 (-beta, -alpha)
+            // 沒得分 -> 換人 -> NegaMax 標準反轉邏輯
             value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
         }
 
@@ -305,7 +307,7 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
     return bestValue;
 }
 
-// 評估函式
+// 評估函式 (修正版)
 function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     const myScore = isMaxPlayer ? scoresState[playerAINumber] : scoresState[playerOpponentNumber];
     const oppScore = isMaxPlayer ? scoresState[playerOpponentNumber] : scoresState[playerAINumber];
@@ -316,20 +318,26 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
          return heuristicScore + (myScore > oppScore ? HEURISTIC_WIN_SCORE : -HEURISTIC_WIN_SCORE);
     }
     
-    // 評估盤面危險度/機會
     let safeMoves = 0;
     let minorUnsafeMoves = 0;
     let criticalUnsafeMoves = []; 
+    
     for (const sq of squaresState) {
         if (sq.filled) continue;
         const sides = getSidesDrawn(sq, linesState);
         if (sides === 3) {
-            // 3 邊格對當前玩家是好機會 (可以得分)
+            // 【修正重點 3】：3邊格的價值
+            // 3邊格意味著當前玩家 (isMaxPlayer) 可以吃掉它。
+            // 所以這對當前玩家是「加分」。
+            // 這裡加上 HEURISTIC_CRITICAL_MOVE_PENALTY (800) 是正確的，代表這是一個好機會。
             heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; 
+            
+            // 我們記錄下來，但不應該在後面把它當作「連鎖反應的損失」扣掉
             const criticalLineId = sq.lineKeys.find(key => linesState[key].players.length === 0);
             if (criticalLineId) criticalUnsafeMoves.push(criticalLineId);
+
         } else if (sides === 2) {
-            // 2 邊格是危險的 (下了變 3 邊)
+            // 2邊格是危險的 (下了變 3 邊給對手)
             heuristicScore -= HEURISTIC_MINOR_MOVE_PENALTY;
             minorUnsafeMoves++;
         } else {
@@ -337,26 +345,16 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
         }
     }
     
-    // 如果只剩下危險步，計算連鎖反應損失
-    if (safeMoves === 0 && minorUnsafeMoves === 0 && criticalUnsafeMoves.length > 0) {
-        let minChain = Infinity;
-        const uniqueCriticalLines = [...new Set(criticalUnsafeMoves)];
-        for (const lineId of uniqueCriticalLines) {
-            const chainLength = calculateChainReaction(linesState[lineId], linesState, squaresState);
-            if (chainLength < minChain) {
-                minChain = chainLength;
-            }
-        }
-        if (minChain < Infinity) {
-             // 預測會失去多少分
-             heuristicScore -= minChain * HEURISTIC_SQUARE_VALUE;
-        }
-    }
+    // 【修正重點 4】：移除了錯誤的「連鎖反應扣分」
+    // 原本的代碼在這裡會計算 minChain 並從分數中「扣除」。
+    // 這導致 AI 在發現自己可以吃掉一整條龍時，反而覺得分數會大減，因此不敢去吃。
+    // 我們移除了那個區塊，讓 AI 根據基本的 (得分 * 1000 + 800) 來貪婪地吃分。
+
     return heuristicScore;
 }
 
 
-// 排序函式 (優化 Alpha-Beta 剪枝效率)
+// 排序函式
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { 
         let priority = 0;
@@ -556,55 +554,4 @@ function getSegmentsForLine(dotA, dotB, linesObj = aiLines) {
 
 function deepCopy(obj) {
     return JSON.parse(JSON.stringify(obj));
-}
-
-function calculateChainReaction(aiSacrificeSegment, linesState, squaresState) {
-    let totalChainLength = 0;
-    const simulatedDrawnLines = new Set();
-    simulatedDrawnLines.add(aiSacrificeSegment.id);
-    const startingBoxes = [];
-    for (const sq of squaresState) {
-        if (sq.filled || !sq.lineKeys.includes(aiSacrificeSegment.id)) {
-            continue;
-        }
-        let sidesDrawn = 0;
-        sq.lineKeys.forEach(key => {
-            if (linesState[key].players.length > 0) sidesDrawn++;
-        });
-        
-        if (sidesDrawn === 3) {
-            startingBoxes.push(sq);
-        }
-    }
-    const boxQueue = [...startingBoxes];
-    const processedBoxes = new Set(startingBoxes.map(sq => sq.lineKeys.join(',')));
-    while (boxQueue.length > 0) {
-        const currentBox = boxQueue.shift();
-        totalChainLength++;
-        currentBox.lineKeys.forEach(key => simulatedDrawnLines.add(key));
-        for (const lineKey of currentBox.lineKeys) {
-            for (const adjacentSq of squaresState) {
-                const adjacentBoxId = adjacentSq.lineKeys.join(',');
-                if (adjacentSq === currentBox || adjacentSq.filled || processedBoxes.has(adjacentBoxId)) {
-                    continue;
-                }
-                if (adjacentSq.lineKeys.includes(lineKey)) {
-                    let adjacentSidesDrawn = 0;
-                    let fourthSide = null;
-                    for (const adjKey of adjacentSq.lineKeys) {
-                        if (linesState[adjKey].players.length > 0 || simulatedDrawnLines.has(adjKey)) {
-                            adjacentSidesDrawn++;
-                        } else {
-                            fourthSide = adjKey;
-                        }
-                    }
-                    if (adjacentSidesDrawn === 3 && fourthSide !== null) {
-                        boxQueue.push(adjacentSq);
-                        processedBoxes.add(adjacentBoxId);
-                    }
-                }
-            }
-        }
-    }
-    return totalChainLength;
 }
