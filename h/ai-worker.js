@@ -1,8 +1,8 @@
 /**
  * ============================================
- * AI Web Worker (ai-worker.js) - 智能邏輯修正版
- * * 修正：AI 不再主動送分 (修復評估函數視角錯誤)
- * * 修正：正確識別 3 邊格對不同玩家的價值
+ * AI Web Worker (ai-worker.js) - 智能策略優化版
+ * * 優化：在得分時，優先選擇能「延續連鎖」的步數
+ * * 優化：避免在得分同時製造出對手未來的機會 (2邊格)
  * ============================================
  */
 
@@ -31,12 +31,13 @@ let ttHits = 0;
 const MAX_SEARCH_DEPTH = 30; 
 const TIME_LIMIT_MS = 1000; 
 
-// 評估分數權重 (大幅調整以修正送分行為)
+// 評估分數權重
 const HEURISTIC_WIN_SCORE = 10000000;
 const HEURISTIC_SQUARE_VALUE = 5000;
-// 關鍵修正：送給對手 3 邊格的懲罰必須 > 得分價值，讓 AI 覺得「送分比沒得分還慘」
-const HEURISTIC_GIVE_AWAY_PENALTY = 8000; 
-const HEURISTIC_TAKE_SCORE_BONUS = 1000; 
+const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; 
+const HEURISTIC_MINOR_MOVE_PENALTY = 200; 
+// 【新增】連鎖獎勵：讓 AI 傾向於選擇能繼續得分的步
+const HEURISTIC_CHAIN_BONUS = 500;
 
 // --- Web Worker 入口 ---
 self.onmessage = function (e) {
@@ -97,7 +98,7 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     
     let winningMoves = [];
     let safeMoves = [];
-    let badMoves = []; // 送分步
+    let badMoves = []; 
     
     for (const move of availableMoves) {
         let squaresCompleted = 0;
@@ -118,7 +119,7 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
             });
 
             if (sidesAfterMove === 4) squaresCompleted++;
-            else if (sidesAfterMove === 3) isBad = true; // 下完變 3 邊 = 送分
+            else if (sidesAfterMove === 3) isBad = true; 
         }
         
         const moveInfo = { move, squaresCompleted };
@@ -128,9 +129,7 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
         else badMoves.push(moveInfo);
     }
     
-    // 優先級：得分 > 安全 > 爛步
     if (winningMoves.length > 0) {
-        // 貪婪吃分
         const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
         const best = winningMoves.filter(m => m.squaresCompleted === maxScore);
         return { ...best[Math.floor(Math.random() * best.length)].move };
@@ -162,20 +161,15 @@ function findBestMoveMinimaxIterative(availableMoves) {
         const squaresCopy = deepCopy(aiSquares);
         const scoresCopy = deepCopy(aiScores);
         
-        // 排序並分類移動
         const sortedMoves = sortMovesForMinimax(availableMoves, linesCopy, squaresCopy);
         
-        // 【優化】過濾移動
-        // 1. 如果有得分步，只看得分步 (貪婪剪枝)
-        // 2. 如果沒有得分步，只看安全步
-        // 3. 如果只有爛步，才看爛步
         let movesToSearch = [];
         const scoring = sortedMoves.filter(m => getMoveType(m, linesCopy, squaresCopy) === 'scoring');
         const safe = sortedMoves.filter(m => getMoveType(m, linesCopy, squaresCopy) === 'safe');
         
         if (scoring.length > 0) movesToSearch = scoring;
         else if (safe.length > 0) movesToSearch = safe;
-        else movesToSearch = sortedMoves; // 被迫送分，從爛步裡挑最好的
+        else movesToSearch = sortedMoves; 
 
         for (const move of movesToSearch) { 
             if (performance.now() - startTime > TIME_LIMIT_MS) {
@@ -209,7 +203,6 @@ function findBestMoveMinimaxIterative(availableMoves) {
     } 
 
     if (!overallBestMove) {
-        // 降級處理
         return findBestMoveHeuristic(availableMoves);
     }
 
@@ -239,13 +232,11 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
 
-    // 內部層級也應用同樣的過濾邏輯
     const sortedMoves = sortMovesForMinimax(availableMoves, linesState, squaresState);
     let movesToSearch = [];
     const scoring = sortedMoves.filter(m => getMoveType(m, linesState, squaresState) === 'scoring');
     const safe = sortedMoves.filter(m => getMoveType(m, linesState, squaresState) === 'safe');
     
-    // 這裡可以寬鬆一點，如果是 Max 層 (AI)，絕對優先得分
     if (isMaxPlayer && scoring.length > 0) movesToSearch = scoring;
     else if (safe.length > 0) movesToSearch = safe;
     else movesToSearch = sortedMoves;
@@ -301,7 +292,6 @@ function getMoveType(move, linesState, squaresState) {
 }
 
 
-// 【關鍵修正】評估函數
 function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     const myScore = isMaxPlayer ? scoresState[playerAINumber] : scoresState[playerOpponentNumber];
     const oppScore = isMaxPlayer ? scoresState[playerOpponentNumber] : scoresState[playerAINumber];
@@ -316,33 +306,74 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
         const sides = getSidesDrawn(sq, linesState);
         
         if (sides === 3) {
-            // 這是一個「懸空」的分數 (差一邊)
             if (isMaxPlayer) {
-                // 如果現在輪到 AI (Max) 下，這分是 AI 的，太棒了！
-                heuristicScore += HEURISTIC_TAKE_SCORE_BONUS; 
+                heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; 
             } else {
-                // 【修正】如果現在輪到對手下 (Min 節點)，這分會被對手拿走，超級大災難！
-                // 懲罰必須 > 1個格子的價值，這樣 AI 才會覺得「送分」比「沒得分」還慘
-                heuristicScore -= HEURISTIC_GIVE_AWAY_PENALTY;
+                // 如果輪到對手，3 邊格是大扣分（送分）
+                heuristicScore -= 2000; // 提高送分懲罰
             }
-        } 
-        // 移除 2 邊格的懲罰，因為那只是普通的安全步，不需要過度懲罰
-        // 讓 minimax 透過搜尋深度自己去發現會不會變成 3 邊
+        } else if (sides === 2) {
+            heuristicScore -= HEURISTIC_MINOR_MOVE_PENALTY;
+        }
     }
     
     return heuristicScore;
 }
 
+// 【關鍵優化】排序函式：區分「好的得分」與「壞的得分」
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { 
         let priority = 0;
-        const type = getMoveType(move, linesState, squaresState);
+        let uniqueAdjacentSquares = new Set();
         
-        if (type === 'scoring') priority = 1000;
-        else if (type === 'safe') priority = 100;
-        else priority = -100; 
+        for (const seg of move.segments) {
+            const adjacentSquares = getAdjacentSquares(seg.id, squaresState);
+            adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
+        }
+
+        let createsThreeSided = false;
+        let createsTwoSided = false;
+        let isScoring = false;
+
+        for (const sq of uniqueAdjacentSquares) {
+            if (sq.filled) continue;
+            
+            let sidesAfterMove = 0;
+            sq.lineKeys.forEach(key => {
+                if (linesState[key].players.length > 0) sidesAfterMove++;
+                else if (move.segments.some(seg => seg.id === key)) sidesAfterMove++;
+            });
+            
+            if (sidesAfterMove === 4) {
+                isScoring = true;
+            } else if (sidesAfterMove === 3) {
+                createsThreeSided = true;
+            } else if (sidesAfterMove === 2) {
+                createsTwoSided = true;
+            }
+        }
         
-        if (move.segments.every(seg => seg.players.length === 0)) priority += 1;
+        if (isScoring) {
+            priority += 100000; 
+            // 【優化點】如果得分的同時，製造了新的 3 邊格 (可以繼續連鎖)，給予額外獎勵
+            if (createsThreeSided) priority += 5000; 
+            // 【優化點】如果得分的同時，製造了 2 邊格 (未來可能送分)，稍微扣分
+            if (createsTwoSided) priority -= 2000;
+        } 
+        else if (createsThreeSided) {
+            priority -= 10000; // 送分步 (非得分，卻製造3邊)
+        } 
+        else if (createsTwoSided) {
+            priority -= 100; // 風險步 (製造2邊)
+        } 
+        else {
+            priority += 10; // 安全步
+        }
+
+        // 優先畫空白區域
+        if (move.segments.every(seg => seg.players.length === 0)) {
+             priority += 5;
+        }
 
         return { move, priority };
     }).sort((a, b) => b.priority - a.priority)
@@ -350,7 +381,7 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
 }
 
 
-// --- 基礎輔助函式 (無變更) ---
+// --- 基礎輔助函式 ---
 
 function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
     const moves = [];
