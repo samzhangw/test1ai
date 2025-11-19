@@ -1,6 +1,7 @@
 /**
  * ============================================
- * AI Web Worker (ai-worker.js) - 終極修正版
+ * AI Web Worker (ai-worker.js) - 無限時間版
+ * * 移除時間限制，AI 會運算到指定深度 (MAX_SEARCH_DEPTH) 或解完殘局
  * ============================================
  */
 
@@ -22,14 +23,15 @@ let aiDots = [];
 let transpositionTable = new Map();
 let ttHits = 0; 
 
+// 搜尋深度 (注意：因為移除了時間限制，在遊戲初期深度設太高會算很久)
+// 建議：如果覺得太慢，可以將此值調小 (例如 4-6)
 const MAX_SEARCH_DEPTH = 30; 
-const TIME_LIMIT_MS = 2500;
 
-// 評估分數權重 (調高得分價值，確保 AI 貪婪)
+// 評估分數權重
 const HEURISTIC_WIN_SCORE = 10000000;
-const HEURISTIC_SQUARE_VALUE = 5000;       // 得一分 +5000
-const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; // 製造3邊格 (好機會) +800
-const HEURISTIC_MINOR_MOVE_PENALTY = 200;    // 製造2邊格 (送分險) -200
+const HEURISTIC_SQUARE_VALUE = 5000;
+const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; 
+const HEURISTIC_MINOR_MOVE_PENALTY = 200; 
 
 // --- Web Worker 入口 ---
 self.onmessage = function (e) {
@@ -64,10 +66,10 @@ self.onmessage = function (e) {
     let bestMove;
 
     if (difficulty === 'greedy') {
-        // 簡單模式：只用貪婪啟發式
+        // 簡單模式：只用貪婪啟發式 (運算極快)
         bestMove = findBestMoveHeuristic(availableMoves);
     } else {
-        // 困難模式：使用 Minimax
+        // 困難模式：使用 Minimax (無時間限制，運算較久但最強)
         bestMove = findBestMoveMinimaxIterative(availableMoves);
     }
     
@@ -153,19 +155,15 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
     return bestDotMove ? { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB } : null;
 }
 
-// --- 策略 2: Minimax (迭代加深版) ---
+// --- 策略 2: Minimax (迭代加深版 - 無時間限制) ---
 function findBestMoveMinimaxIterative(availableMoves) {
-    const startTime = performance.now();
+    // 移除了 startTime 和時間檢查
     let maxDepth = Math.min(MAX_SEARCH_DEPTH, availableMoves.length);
     
     let overallBestMove = null; 
     
     // 1. 迭代加深
     for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
-        
-        if (currentDepth > 1 && (performance.now() - startTime > TIME_LIMIT_MS)) {
-            break; 
-        }
         
         let currentBestMovesForThisDepth = []; 
         let currentBestScoreForThisDepth = -Infinity;
@@ -174,26 +172,22 @@ function findBestMoveMinimaxIterative(availableMoves) {
         const squaresCopy = deepCopy(aiSquares);
         const scoresCopy = deepCopy(aiScores);
         
-        // 【重要修正】：永遠排序！確保得分步最先被計算，避免超時沒算到
+        // 強制排序
         const sortedMoves = sortMovesForMinimax(availableMoves, linesCopy, squaresCopy);
 
         // 2. 根節點移動迴圈
         for (const move of sortedMoves) { 
-            
-            if (performance.now() - startTime > TIME_LIMIT_MS) {
-                // 如果已經找到至少一個可行解，就不要完全中斷，保留目前的最佳解
-                if (currentBestMovesForThisDepth.length > 0) break;
-            }
 
             const undoData = makeMove(move.segments, playerAINumber, linesCopy, squaresCopy, scoresCopy);
             
             let score;
+            // 呼叫 minimax 時不再傳遞 startTime
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                // 根節點得分：AI 繼續下，保持 Max 視角，不反轉分數
-                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime); 
+                // 得分繼續：保持視角 (True)
+                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy); 
             } else {
-                // 沒得分：換對手，反轉分數
-                score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
+                // 換人：反轉視角 (False)
+                score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy);
             }
             
             undoMove(undoData, linesCopy, squaresCopy, scoresCopy); 
@@ -222,13 +216,11 @@ function findBestMoveMinimaxIterative(availableMoves) {
 }
 
 /**
- * Minimax 核心函式
+ * Minimax 核心函式 (無時間限制)
  */
-function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState, startTime) {
+function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState) {
     
-    if (depth > 0 && (performance.now() - startTime > TIME_LIMIT_MS)) {
-        return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
-    }
+    // 移除了時間檢查
 
     const boardHash = getBoardHash(linesState);
     if (transpositionTable.has(boardHash)) {
@@ -245,7 +237,6 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
     }
 
     let bestValue = -Infinity; 
-    // 【重要】：遞迴中也總是排序，讓 Alpha-Beta 剪枝發揮最大效用
     const sortedMoves = sortMovesForMinimax(availableMoves, linesState, squaresState);
 
     for (const move of sortedMoves) { 
@@ -256,10 +247,10 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
             // 得分：同玩家繼續，不反轉
-            value = minimax(depth, alpha, beta, isMaxPlayer, true, linesState, squaresState, scoresState, startTime);
+            value = minimax(depth, alpha, beta, isMaxPlayer, true, linesState, squaresState, scoresState);
         } else {
             // 換人：反轉
-            value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
+            value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState);
         }
 
         undoMove(undoData, linesState, squaresState, scoresState); 
@@ -290,10 +281,8 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
         if (sq.filled) continue;
         const sides = getSidesDrawn(sq, linesState);
         if (sides === 3) {
-            // 3邊格：對當前玩家是極好的機會 (+800)
             heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; 
         } else if (sides === 2) {
-            // 2邊格：對當前玩家是壞事 (-200)
             heuristicScore -= HEURISTIC_MINOR_MOVE_PENALTY;
         }
     }
@@ -301,7 +290,7 @@ function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     return heuristicScore;
 }
 
-// 排序函式 (O(N) 複雜度，很快)
+// 排序函式
 function sortMovesForMinimax(moves, linesState, squaresState) {
     return moves.map(move => { 
         let priority = 0;
@@ -322,17 +311,16 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
             });
             
             if (sidesAfterMove === 4) {
-                priority += 100000; // 絕對優先：能得分
+                priority += 100000; 
             } else if (sidesAfterMove === 3) {
-                priority -= 1000;   // 絕對避免：送分給對手
+                priority -= 1000;   
             } else if (sidesAfterMove === 2) {
-                priority -= 50;     // 盡量避免：製造2邊
+                priority -= 50;     
             } else {
-                priority += 10;     // 普通安全步
+                priority += 10;     
             }
         }
         
-        // 小優化：優先畫空白區域
         if (move.segments.every(seg => seg.players.length === 0)) {
              priority += 5;
         }
@@ -342,7 +330,8 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
       .map(item => item.move);
 }
 
-// --- 輔助函式 (保持不變) ---
+
+// --- 輔助函式 ---
 
 function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
     const moves = [];
