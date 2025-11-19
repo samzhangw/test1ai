@@ -56,14 +56,28 @@
         <div id="controls-column">
 
             <div id="status-bar" class="control-card">
-                <div id="player1-score" class="score-box active">
-                    <div class="p-label">PLAYER 1</div>
-                    <span id="score1">0</span>
+                <div class="score-row">
+                    <div id="player1-score" class="score-box active">
+                        <div class="p-label">PLAYER 1</div>
+                        <span id="score1">0</span>
+                    </div>
+                    <div class="vs-divider">VS</div>
+                    <div id="player2-score" class="score-box">
+                        <div class="p-label">PLAYER 2</div>
+                        <span id="score2">0</span>
+                    </div>
                 </div>
-                <div class="vs-divider">VS</div>
-                <div id="player2-score" class="score-box">
-                    <div class="p-label">PLAYER 2</div>
-                    <span id="score2">0</span>
+
+                <div id="win-rate-container" class="hidden">
+                    <div class="win-rate-labels">
+                        <span class="rate-p1">P1 優勢</span>
+                        <span id="win-rate-value">50%</span>
+                        <span class="rate-p2">AI/P2 優勢</span>
+                    </div>
+                    <div class="win-rate-bar-bg">
+                        <div id="win-rate-bar-fill"></div>
+                        <div class="center-marker"></div>
+                    </div>
                 </div>
             </div>
 
@@ -129,6 +143,10 @@
                     </div> 
 
                     <div class="button-group">
+                        <button id="hint-button" class="btn warning shadow-effect">
+                            <span class="btn-icon">💡</span> 研究必勝路線 (AI 提示)
+                        </button>
+
                         <button id="reset-button" class="btn success shadow-effect">
                             <span class="btn-icon">↺</span> 重置遊戲
                         </button>
