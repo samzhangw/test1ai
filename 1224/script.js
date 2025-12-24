@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: 1218/script.js
-fullContent:
 document.addEventListener('DOMContentLoaded', () => {
     // 取得 HTML 元素
     const canvas = document.getElementById('game-canvas');
@@ -1252,4 +1248,3 @@ document.addEventListener('DOMContentLoaded', () => {
     handleGameModeChange(); 
     initGame();
 });
-}
