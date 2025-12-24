@@ -4,19 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>點格棋盤 - Layout Batch Edition</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="style.css">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
+
     <div class="bg-shape shape-1"></div>
     <div class="bg-shape shape-2"></div>
     <div class="bg-grid"></div>
 
     <div id="main-container">
+
         <div id="game-column">
+            
             <header>
                 <div class="badge">AI POWERED</div>
                 <h1>DOTS & BOXES</h1>
@@ -25,12 +31,14 @@
 
             <div id="canvas-container">
                 <canvas id="game-canvas"></canvas>
+
                 <div id="ai-thinking-indicator" class="hidden">
                     <div class="loading-glass">
                         <div class="spinner"></div>
                         <p>AI 正在思考中...</p>
                     </div>
                 </div>
+
                 <div id="game-over-message" class="hidden">
                     <div class="glass-panel">
                         <span id="winner-text"></span>
@@ -46,6 +54,7 @@
         </div>
 
         <div id="controls-column">
+
             <div id="status-bar" class="control-card">
                 <div id="player1-score" class="score-box active">
                     <div class="p-label">PLAYER 1</div>
@@ -61,6 +70,7 @@
             <div id="game-controls" class="control-card">
                 <div class="control-section">
                     <h3 class="section-title"><span class="icon">⚙️</span> 遊戲設定</h3>
+                    
                     <div class="settings-grid">
                         <div id="game-mode-selector">
                             <label for="game-mode">對戰模式</label>
@@ -70,6 +80,7 @@
                                 <option value="cvc" selected>CVC (AI 對戰)</option>
                             </select>
                         </div>
+
                         <div id="start-player-selector">
                             <label for="start-player">先手方</label>
                             <select id="start-player">
@@ -78,6 +89,7 @@
                                 <option value="random" selected>隨機決定</option>
                             </select>
                         </div>
+
                         <div id="ai-1-difficulty-selector">
                             <label for="ai-1-difficulty">電腦 1 策略 (CVC)</label>
                             <select id="ai-1-difficulty">
@@ -85,6 +97,7 @@
                                 <option value="minimax" selected>困難 (智能運算)</option>
                             </select>
                         </div>
+
                         <div id="ai-2-difficulty-selector">
                             <label for="ai-2-difficulty">電腦 2 策略 (PVC/CVC)</label>
                             <select id="ai-2-difficulty">
@@ -92,14 +105,16 @@
                                 <option value="minimax" selected>困難 (智能運算)</option>
                             </select>
                         </div>
+
                         <div id="board-size-selector">
                             <label>棋盤尺寸</label>
                             <div class="input-group-row">
-                                <input id="board-rows" type="number" min="2" max="12" value="4" />
+                                <input id="board-rows" type="number" min="2" max="12" value="4" placeholder="列" />
                                 <span class="separator">×</span>
-                                <input id="board-cols" type="number" min="2" max="12" value="4" />
+                                <input id="board-cols" type="number" min="2" max="12" value="4" placeholder="欄" />
                             </div>
                         </div>
+
                         <div id="line-length-selector">
                             <label for="line-length">連線長度</label>
                             <input id="line-length" type="number" min="1" max="10" value="1" />
@@ -112,40 +127,64 @@
                             </select>
                         </div>
                     </div> 
+
                     <div class="button-group">
                         <div class="sub-buttons">
-                             <button id="undo-button" class="btn secondary shadow-effect">↩ 悔棋</button>
-                            <button id="reset-button" class="btn success shadow-effect">↺ 重置</button>
+                             <button id="undo-button" class="btn secondary shadow-effect">
+                                <span class="btn-icon">↩</span> 悔棋
+                            </button>
+                            <button id="reset-button" class="btn success shadow-effect">
+                                <span class="btn-icon">↺</span> 重置
+                            </button>
+                        </div>
+                        <div class="sub-buttons">
+                            <button id="export-png-button" class="btn secondary">
+                                <span class="btn-icon">↓</span> 圖片
+                            </button>
+                            <button id="export-csv-button" class="btn secondary">
+                                <span class="btn-icon">📄</span> 紀錄
+                            </button>
                         </div>
                     </div>
                 </div>
 
                 <div class="control-section">
                     <h3 class="section-title"><span class="icon">⚡</span> 批次運算</h3>
+                    
                     <div id="batch-controls">
                         <div class="batch-input-group">
-                            <label for="batch-games-input">場次</label>
+                            <label for="batch-games-input">執行場次</label>
                             <input id="batch-games-input" type="number" min="1" max="1000" value="10" />
                         </div>
+                        
                         <div class="batch-input-group">
                             <label for="batch-layout-mode">初始佈局</label>
                             <select id="batch-layout-mode">
-                                <option value="empty">空白</option>
-                                <option value="random_10">隨機 10%</option>
-                                <option value="checkerboard">棋盤式</option>
+                                <option value="empty">空白棋盤</option>
+                                <option value="random_10">隨機 10% 線段</option>
+                                <option value="checkerboard">棋盤式預填</option>
                             </select>
                         </div>
-                        <button id="start-batch-button" class="btn primary shadow-effect">開始</button>
-                        <button id="stop-batch-button" class="btn danger hidden">停止</button>
+
+                        <button id="start-batch-button" class="btn primary shadow-effect">開始運算</button>
+                        <button id="stop-batch-button" class="btn danger hidden">強制終止</button>
                     </div>
+
                     <div id="batch-status" class="hidden">
-                        <div class="status-header"><p>處理中...</p><span id="percent-text">0%</span></div>
-                        <div class="progress-bar"><div id="progress-bar-inner"></div></div>
+                        <div class="status-header">
+                            <p>正在處理數據...</p>
+                            <span id="percent-text">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="progress-bar-inner"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div> 
+
     </div> 
+
     <script src="script.js"></script>
 </body>
 </html>
