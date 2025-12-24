@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>點格棋盤 - Layout Batch Edition</title>
+    <title>點格棋盤 - Light Edition</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,7 +26,7 @@
             <header>
                 <div class="badge">AI POWERED</div>
                 <h1>DOTS & BOXES</h1>
-                <p class="subtitle">連結點陣 • 佔領格線 • 佈局模式</p>
+                <p class="subtitle">連結點陣 • 佔領格線 • 智取對手</p>
             </header>
 
             <div id="canvas-container">
@@ -77,7 +77,7 @@
                             <select id="game-mode">
                                 <option value="pvp">PVP (雙人對戰)</option>
                                 <option value="pvc">PVC (挑戰 AI)</option>
-                                <option value="cvc" selected>CVC (AI 對戰)</option>
+                                <option value="cvc">CVC (AI 對戰)</option>
                             </select>
                         </div>
 
@@ -156,16 +156,6 @@
                             <label for="batch-games-input">執行場次</label>
                             <input id="batch-games-input" type="number" min="1" max="1000" value="10" />
                         </div>
-                        
-                        <div class="batch-input-group">
-                            <label for="batch-layout-mode">初始佈局</label>
-                            <select id="batch-layout-mode">
-                                <option value="empty">空白棋盤</option>
-                                <option value="random_10">隨機 10% 線段</option>
-                                <option value="checkerboard">棋盤式預填</option>
-                            </select>
-                        </div>
-
                         <button id="start-batch-button" class="btn primary shadow-effect">開始運算</button>
                         <button id="stop-batch-button" class="btn danger hidden">強制終止</button>
                     </div>
