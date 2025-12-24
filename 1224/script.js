@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelLineButton = document.getElementById('cancel-line-button');
     const actionBar = document.getElementById('action-bar');
     const resetButton = document.getElementById('reset-button');
-    const undoButton = document.getElementById('undo-button'); // 新增：悔棋按鈕
+    const undoButton = document.getElementById('undo-button'); 
     const exportPngButton = document.getElementById('export-png-button');
     const exportCsvButton = document.getElementById('export-csv-button');
     const aiThinkingIndicator = document.getElementById('ai-thinking-indicator');
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lineLengthInput = document.getElementById('line-length');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
     
-    // 【新增】兩個 AI 難度選擇
+    // AI 難度選擇
     const ai1DifficultySelect = document.getElementById('ai-1-difficulty');
     const ai2DifficultySelect = document.getElementById('ai-2-difficulty');
 
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // AI Web Worker
     let aiWorker;
-    let aiRequestId = 0; // 新增：用於追蹤 AI 請求，防止悔棋後舊的運算結果覆蓋
+    let aiRequestId = 0; 
 
     if (window.Worker) {
         aiWorker = new Worker('ai-worker.js');
@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
         alert("您的瀏覽器不支援 Web Workers，AI 將無法運作。");
     }
-
 
     // 遊戲設定
     let gridRows = 4;
@@ -63,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const LINE_WIDTH = 8;
     const CLICK_TOLERANCE_DOT = 20;
 
-    // 配色方案：Modern Frost Light Theme
+    // 配色方案
     const PLAYER_COLORS = {
         1: { line: '#3b82f6', fill: 'rgba(59, 130, 246, 0.2)', text: '#2563eb' },
         2: { line: '#f43f5e', fill: 'rgba(244, 63, 94, 0.2)', text: '#e11d48' },
@@ -88,8 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let moveHistory = [];
     let turnCounter = 1;
-
-    // 【新增】歷史狀態堆疊，用於悔棋
     let historyStack = [];
 
     // 動畫相關變數
@@ -103,25 +100,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let isBatchRunning = false;
     let totalGamesToRun = 0;
     let currentGameNumber = 1;
-    let batchInitialState = null; // 【新增】用於儲存批次開始前的佈局狀態
-
+    let batchInitialState = null; 
 
     // --- AI Worker 訊息處理 ---
     
     function handleWorkerMessage(e) {
-        // 【修改】檢查 requestId，如果是過期的請求（例如已經悔棋），則忽略
         const { type, dotA, dotB, requestId } = e.data;
         
         if (requestId !== undefined && requestId !== aiRequestId) {
-            console.log("忽略過期的 AI 回應");
             return;
         }
 
         aiThinkingIndicator.classList.add('hidden');
 
         if (type === 'bestMoveFound') {
-            // 注意：這裡接收回來的 dotA, dotB 是 Worker 裡的物件，
-            // 需要對應回主執行緒的 dots 陣列才能正確運作（因為記憶體位置不同）
             const mainDotA = dots[dotA.r][dotA.c];
             const mainDotB = dots[dotB.r][dotB.c];
             executeAIMove(mainDotA, mainDotB);
@@ -150,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function initGame() {
         if (isBatchRunning) {
             gameMode = 'cvc';
-            gameModeSelect.value = 'cvc';
+            if (gameModeSelect) gameModeSelect.value = 'cvc';
             ANIMATION_DURATION = 0; 
             
             const percent = (Math.max(0, currentGameNumber - 1) / totalGamesToRun) * 100;
@@ -159,146 +151,56 @@ document.addEventListener('DOMContentLoaded', () => {
             progressBarInner.style.width = `${percent}%`;
 
         } else {
-            gameMode = gameModeSelect.value;
+            if (gameModeSelect) gameMode = gameModeSelect.value;
             ANIMATION_DURATION = 500;
         }
 
-        // 【新增】如果正在批次執行且有預設佈局，則從佈局還原，不重新生成空盤
+        // --- 核心初始化邏輯 ---
         if (isBatchRunning && batchInitialState) {
-            const state = JSON.parse(JSON.stringify(batchInitialState));
-            
-            gridRows = state.gridRows;
-            gridCols = state.gridCols;
-            maxLineLength = state.maxLineLength || 1; // 兼容舊狀態
-            
-            // 確保 UI 輸入框顯示正確數值 (視覺用)
-            if (boardRowsInput) boardRowsInput.value = String(gridRows);
-            if (boardColsInput) boardColsInput.value = String(gridCols);
-            if (lineLengthInput) lineLengthInput.value = String(maxLineLength);
+            // 情況 A: 批次模式且有預存佈局，進行還原
+            try {
+                const state = JSON.parse(JSON.stringify(batchInitialState));
+                
+                gridRows = state.gridRows;
+                gridCols = state.gridCols;
+                maxLineLength = state.maxLineLength || 1;
+                
+                // 更新 UI 數值
+                if (boardRowsInput) boardRowsInput.value = String(gridRows);
+                if (boardColsInput) boardColsInput.value = String(gridCols);
+                if (lineLengthInput) lineLengthInput.value = String(maxLineLength);
 
-            // 設定畫布大小
-            const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
-            const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-            
-            // 還原遊戲變數
-            lines = state.lines;
-            squares = state.squares;
-            scores = state.scores;
-            currentPlayer = state.currentPlayer;
-            turnCounter = state.turnCounter;
-            moveHistory = state.moveHistory;
-            dots = state.dots; // 注意：這裡的物件參考與 lines 裡的 p1/p2 不同，但座標數值一致，邏輯可行
-            
-            // 其他狀態重置
-            totalSquares = squares.length;
-            selectedDot1 = null;
-            selectedDot2 = null;
-            actionBar.classList.add('hidden');
-            gameOverMessage.classList.add('hidden');
-            aiThinkingIndicator.classList.add('hidden');
-            historyStack = []; 
-            aiRequestId++; 
-            
-            scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
+                const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
+                const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                
+                lines = state.lines;
+                squares = state.squares;
+                scores = state.scores;
+                currentPlayer = state.currentPlayer;
+                turnCounter = state.turnCounter;
+                moveHistory = state.moveHistory;
+                dots = state.dots; 
+                
+                totalSquares = squares.length;
+                selectedDot1 = null;
+                selectedDot2 = null;
+                actionBar.classList.add('hidden');
+                gameOverMessage.classList.add('hidden');
+                aiThinkingIndicator.classList.add('hidden');
+                historyStack = []; 
+                aiRequestId++; 
+                
+                scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
+            } catch (err) {
+                console.error("還原批次狀態失敗，降級為標準初始化", err);
+                initGameStandard();
+            }
 
         } else {
-            // --- 原始標準初始化邏輯 (空白盤面) ---
-            const desiredRows = parseInt(boardRowsInput && boardRowsInput.value ? boardRowsInput.value : '4', 10);
-            const desiredCols = parseInt(boardColsInput && boardColsInput.value ? boardColsInput.value : '4', 10);
-            gridRows = Math.max(2, Math.min(12, isNaN(desiredRows) ? 4 : desiredRows));
-            gridCols = Math.max(2, Math.min(12, isNaN(desiredCols) ? 4 : desiredCols));
-            if (boardRowsInput && boardRowsInput.value != String(gridRows)) boardRowsInput.value = String(gridRows);
-            if (boardColsInput && boardColsInput.value != String(gridCols)) boardColsInput.value = String(gridCols);
-            const desiredLength = parseInt(lineLengthInput && lineLengthInput.value ? lineLengthInput.value : '1', 10);
-            const maxAllowedLength = Math.max(gridRows - 1, gridCols - 1);
-            maxLineLength = Math.max(1, Math.min(maxAllowedLength, isNaN(desiredLength) ? 1 : desiredLength));
-            if (lineLengthInput && lineLengthInput.value != String(maxLineLength)) {
-                lineLengthInput.value = String(maxLineLength);
-                lineLengthInput.max = maxAllowedLength;
-            }
-            
-            const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
-            const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-            
-            scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
-            
-            const startPlayerSetting = (startPlayerSelect && startPlayerSelect.value) ? startPlayerSelect.value : 'random';
-            
-            if (startPlayerSetting === 'player1') {
-                currentPlayer = 1;
-            } else if (startPlayerSetting === 'player2') {
-                currentPlayer = 2;
-            } else { 
-                currentPlayer = Math.random() < 0.5 ? 1 : 2;
-            }
-
-            scores = { 1: 0, 2: 0 };
-            dots = [];
-            lines = {};
-            squares = [];
-            selectedDot1 = null;
-            selectedDot2 = null;
-            actionBar.classList.add('hidden');
-            gameOverMessage.classList.add('hidden');
-            aiThinkingIndicator.classList.add('hidden');
-            moveHistory = [];
-            turnCounter = 1;
-            historyStack = []; 
-            aiRequestId++; 
-
-            const numKey = [
-                [1, 2], 
-                [4, 3] 
-            ];
-
-            for (let r = 0; r < gridRows; r++) {
-                dots[r] = [];
-                for (let c = 0; c < gridCols; c++) {
-                    dots[r][c] = {
-                        x: c * DOT_SPACING + PADDING,
-                        y: r * DOT_SPACING + PADDING,
-                        r: r, c: c,
-                        number: numKey[r % 2][c % 2] 
-                    };
-                }
-            }
-
-            lines = {};
-            for (let r = 0; r < gridRows; r++) {
-                for (let c = 0; c < gridCols; c++) {
-                    if (c < gridCols - 1) {
-                        const id = `H_${r},${c}`;
-                        lines[id] = { p1: dots[r][c], p2: dots[r][c + 1], players: [], id: id };
-                    }
-                    if (r < gridRows - 1) {
-                        const id = `V_${r},${c}`;
-                        lines[id] = { p1: dots[r][c], p2: dots[r + 1][c], players: [], id: id };
-                    }
-                }
-            }
-
-            squares = [];
-            for (let r = 0; r < gridRows - 1; r++) {
-                for (let c = 0; c < gridCols - 1; c++) {
-                    const h1 = `H_${r},${c}`;
-                    const h2 = `H_${r + 1},${c}`;
-                    const v1 = `V_${r},${c}`;
-                    const v2 = `V_${r},${c + 1}`;
-                    squares.push({
-                        lineKeys: [h1, h2, v1, v2],
-                        x: dots[r][c].x,
-                        y: dots[r][c].y,
-                        size: DOT_SPACING,
-                        filled: false, 
-                        player: null
-                    });
-                }
-            }
-            totalSquares = squares.length;
+            // 情況 B: 標準初始化 (一般遊戲 或 批次模式但無佈局)
+            initGameStandard();
         }
         
         updateUI();
@@ -318,6 +220,102 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             requestAnimationFrame(animationLoop);
         }
+    }
+
+    // 抽離標準初始化邏輯，避免變數範圍問題
+    function initGameStandard() {
+        const desiredRows = parseInt(boardRowsInput && boardRowsInput.value ? boardRowsInput.value : '4', 10);
+        const desiredCols = parseInt(boardColsInput && boardColsInput.value ? boardColsInput.value : '4', 10);
+        gridRows = Math.max(2, Math.min(12, isNaN(desiredRows) ? 4 : desiredRows));
+        gridCols = Math.max(2, Math.min(12, isNaN(desiredCols) ? 4 : desiredCols));
+        
+        if (boardRowsInput && boardRowsInput.value != String(gridRows)) boardRowsInput.value = String(gridRows);
+        if (boardColsInput && boardColsInput.value != String(gridCols)) boardColsInput.value = String(gridCols);
+        
+        const desiredLength = parseInt(lineLengthInput && lineLengthInput.value ? lineLengthInput.value : '1', 10);
+        const maxAllowedLength = Math.max(gridRows - 1, gridCols - 1);
+        maxLineLength = Math.max(1, Math.min(maxAllowedLength, isNaN(desiredLength) ? 1 : desiredLength));
+        
+        if (lineLengthInput && lineLengthInput.value != String(maxLineLength)) {
+            lineLengthInput.value = String(maxLineLength);
+            lineLengthInput.max = maxAllowedLength;
+        }
+        
+        const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
+        const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        
+        scoreAndGo = (scoreAgainModeSelect && scoreAgainModeSelect.value === 'yes');
+        
+        const startPlayerSetting = (startPlayerSelect && startPlayerSelect.value) ? startPlayerSelect.value : 'random';
+        if (startPlayerSetting === 'player1') currentPlayer = 1;
+        else if (startPlayerSetting === 'player2') currentPlayer = 2;
+        else currentPlayer = Math.random() < 0.5 ? 1 : 2;
+
+        scores = { 1: 0, 2: 0 };
+        dots = [];
+        lines = {};
+        squares = [];
+        selectedDot1 = null;
+        selectedDot2 = null;
+        actionBar.classList.add('hidden');
+        gameOverMessage.classList.add('hidden');
+        aiThinkingIndicator.classList.add('hidden');
+        moveHistory = [];
+        turnCounter = 1;
+        historyStack = []; 
+        aiRequestId++; 
+
+        const numKey = [
+            [1, 2], 
+            [4, 3] 
+        ];
+
+        for (let r = 0; r < gridRows; r++) {
+            dots[r] = [];
+            for (let c = 0; c < gridCols; c++) {
+                dots[r][c] = {
+                    x: c * DOT_SPACING + PADDING,
+                    y: r * DOT_SPACING + PADDING,
+                    r: r, c: c,
+                    number: numKey[r % 2][c % 2] 
+                };
+            }
+        }
+
+        lines = {};
+        for (let r = 0; r < gridRows; r++) {
+            for (let c = 0; c < gridCols; c++) {
+                if (c < gridCols - 1) {
+                    const id = `H_${r},${c}`;
+                    lines[id] = { p1: dots[r][c], p2: dots[r][c + 1], players: [], id: id };
+                }
+                if (r < gridRows - 1) {
+                    const id = `V_${r},${c}`;
+                    lines[id] = { p1: dots[r][c], p2: dots[r + 1][c], players: [], id: id };
+                }
+            }
+        }
+
+        squares = [];
+        for (let r = 0; r < gridRows - 1; r++) {
+            for (let c = 0; c < gridCols - 1; c++) {
+                const h1 = `H_${r},${c}`;
+                const h2 = `H_${r + 1},${c}`;
+                const v1 = `V_${r},${c}`;
+                const v2 = `V_${r},${c + 1}`;
+                squares.push({
+                    lineKeys: [h1, h2, v1, v2],
+                    x: dots[r][c].x,
+                    y: dots[r][c].y,
+                    size: DOT_SPACING,
+                    filled: false, 
+                    player: null
+                });
+            }
+        }
+        totalSquares = squares.length;
     }
     
     function animationLoop(timestamp) {
@@ -362,7 +360,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fillStyle = PLAYER_COLORS[sq.player].fill;
                 const radius = 16; 
                 ctx.beginPath();
-                ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
+                // 增加相容性檢查：如果瀏覽器不支援 roundRect，使用 rect
+                if (ctx.roundRect) {
+                    ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
+                } else {
+                    ctx.rect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12);
+                }
                 ctx.fill();
                 
                 ctx.fillStyle = PLAYER_COLORS[sq.player].text;
@@ -521,32 +524,21 @@ document.addEventListener('DOMContentLoaded', () => {
         drawCanvas();
     }
 
-    // 【新增】儲存遊戲狀態
     function saveState() {
         const state = {
-            // 注意：這裡只深拷貝資料結構，dots 還是需要保留結構，還原時要特別小心
-            // 由於 dots 物件本身在遊戲中不改變（只改變座標的引用），我們儲存 lines/squares 的資料即可
-            // 在還原時，我們需要把 lines 的 p1, p2 重新對應回 dots 陣列，或者如果我們不依賴物件參考一致性(===)，則直接使用還原的物件
-            // 為了簡化，我們直接儲存整個 JSON，還原時雖然 lines.p1 和 dots[r][c] 不是同一個物件，
-            // 但因為 drawCanvas 和邏輯多半依賴 x,y,r,c 數值，所以通常沒問題。
-            // 唯一要注意的是 findNearestDot 回傳的是 dots[r][c]，而 lines 用的是自己存的 p1。
-            // 只要我們不比較 line.p1 === selectedDot (selectedDot 來自 dots)，就沒問題。
-            // 實際上 isValidLine 比較 r, c，所以是安全的。
             lines: JSON.parse(JSON.stringify(lines)),
             squares: JSON.parse(JSON.stringify(squares)),
             scores: { ...scores },
             currentPlayer: currentPlayer,
             turnCounter: turnCounter,
             moveHistory: JSON.parse(JSON.stringify(moveHistory)),
-            // 為了確保畫面一致，我們也存 dots，雖然它們幾乎不變
             dots: JSON.parse(JSON.stringify(dots)) 
         };
         
         historyStack.push(state);
-        if (historyStack.length > 50) historyStack.shift(); // 限制堆疊大小
+        if (historyStack.length > 50) historyStack.shift(); 
     }
 
-    // 【新增】悔棋功能
     function undo() {
         if (isBatchRunning || isAnimating) return;
         if (historyStack.length === 0) {
@@ -554,35 +546,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 1. 停止 AI 思考：透過增加 requestId 讓舊的 AI 回應無效
         aiRequestId++;
         aiThinkingIndicator.classList.add('hidden');
 
-        // 2. 彈出並還原狀態
         const state = historyStack.pop();
         restoreState(state);
 
-        // 3. 特殊處理 PVC 模式
-        // 如果還原後變成了 AI 的回合 (且遊戲還沒結束)，通常意味著玩家想要悔掉 AI 的步，回到自己上一步。
-        // 所以我們要繼續 Undo，直到變成玩家的回合，或者堆疊空了 (例如 AI 先手)
         if (gameMode === 'pvc' && currentPlayer === 2 && !isGameOver()) {
             if (historyStack.length > 0) {
-                // 遞迴呼叫 undo，繼續往回退
-                // 使用 setTimeout 讓 UI 有機會刷新? 不，直接邏輯處理較好
                 undo(); 
                 return;
             } else {
-                // 堆疊空了，但現在是 AI 回合 (例如 AI 先手開局，玩家想悔第一步?)
-                // 這時候只能讓 AI 重新下這一步
                 checkAndTriggerAIMove();
             }
         } else {
-            // PVP 或 CVC，或 PVC 中玩家自己連續得分的情況
             drawCanvas();
             updateUI();
-            
-            // 如果是 CVC，悔棋後是否要自動繼續？通常悔棋是為了暫停或觀察，所以不自動觸發較好
-            // 如果是 PVP，正常切換 UI
         }
     }
 
@@ -593,13 +572,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPlayer = state.currentPlayer;
         turnCounter = state.turnCounter;
         moveHistory = state.moveHistory;
-        
-        // 為了確保參考一致性，雖然我們存了 dots，但還原的 dots 和 lines.p1 是分離的物件。
-        // 不過如前所述，只要邏輯依賴數值 (r, c, x, y)，這不會造成崩潰。
-        // 我們還原 dots 以確保座標系統一致。
         dots = state.dots; 
         
-        // 清除選擇
         selectedDot1 = null;
         selectedDot2 = null;
         actionBar.classList.add('hidden');
@@ -634,7 +608,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSegments = segments.filter(seg => seg.players.length === 0);
         
         if (newSegments.length === 0) {
-            // ... (同原程式碼警告邏輯)
             const alreadyDrawnBySelf = segments.every(seg => seg.players.includes(currentPlayer));
             if (alreadyDrawnBySelf) {
                 alert("這條線您已經完全畫過了，必須包含至少一個未畫過的虛線格。");
@@ -645,7 +618,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 【新增】在修改狀態前儲存
         saveState();
 
         segments.forEach(seg => {
@@ -702,7 +674,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // ----- 輔助函式 -----
-    // ... (getCanvasAsPNGDataURL, downloadPNG, generateCSVString, downloadCSV 保持不變)
 
     function getCanvasAsPNGDataURL() {
         const originalRadius = currentDotRadius;
@@ -895,15 +866,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const player1Name = getPlayerName(1);
         const player2Name = getPlayerName(2);
         
-        player1ScoreBox.innerHTML = `<div class="p-label">${player1Name}</div><span>${scores[1]}</span>`;
-        player2ScoreBox.innerHTML = `<div class="p-label">${player2Name}</div><span>${scores[2]}</span>`;
+        if(player1ScoreBox) player1ScoreBox.innerHTML = `<div class="p-label">${player1Name}</div><span>${scores[1]}</span>`;
+        if(player2ScoreBox) player2ScoreBox.innerHTML = `<div class="p-label">${player2Name}</div><span>${scores[2]}</span>`;
 
         if (currentPlayer === 1) {
-            player1ScoreBox.classList.add('active');
-            player2ScoreBox.classList.remove('active', 'player2');
+            if(player1ScoreBox) player1ScoreBox.classList.add('active');
+            if(player2ScoreBox) player2ScoreBox.classList.remove('active', 'player2');
         } else {
-            player1ScoreBox.classList.remove('active');
-            player2ScoreBox.classList.add('active', 'player2');
+            if(player1ScoreBox) player1ScoreBox.classList.remove('active');
+            if(player2ScoreBox) player2ScoreBox.classList.add('active', 'player2');
         }
     }
 
@@ -976,17 +947,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridCols: gridCols
             };
             
-            // 【修改】判斷目前是哪位 AI，使用對應的難度設定
             let difficulty;
             if (gameMode === 'cvc') {
                 if (currentPlayer === 1) {
-                    difficulty = ai1DifficultySelect.value;
+                    difficulty = ai1DifficultySelect ? ai1DifficultySelect.value : 'minimax';
                 } else {
-                    difficulty = ai2DifficultySelect.value;
+                    difficulty = ai2DifficultySelect ? ai2DifficultySelect.value : 'minimax';
                 }
             } else if (gameMode === 'pvc') {
-                // 在 PVC 模式，玩家是 P1，電腦是 P2，所以使用 AI-2 的設定
-                difficulty = ai2DifficultySelect.value;
+                difficulty = ai2DifficultySelect ? ai2DifficultySelect.value : 'minimax';
             }
 
             const settings = {
@@ -996,7 +965,6 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             if (aiWorker) {
-                 // 【修改】加入 requestId
                  aiRequestId++;
                  aiWorker.postMessage({ 
                     type: 'startSearch', 
@@ -1039,7 +1007,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 【新增】執行 AI 移動前儲存狀態
         saveState();
 
         segments.forEach(seg => {
@@ -1092,7 +1059,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 批次處理函式 ---
-    // ... (startBatchProcess, stopBatchProcess, downloadBatchZip, downloadStepsZip 保持不變)
 
     function startBatchProcess() {
         if (typeof JSZip === 'undefined') {
@@ -1106,7 +1072,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 【新增】檢查當前棋盤是否有步數，若有則作為批次處理的初始佈局
         if (moveHistory.length > 0 && !isGameOver()) {
             console.log("偵測到既有佈局，將以此作為批次對戰的初始狀態。");
             batchInitialState = {
@@ -1154,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         batchZip = null;
         totalGamesToRun = 0;
         currentGameNumber = 1;
-        batchInitialState = null; // 清除緩存的初始狀態
+        batchInitialState = null; 
 
         setTimeout(initGame, 100);
     }
@@ -1221,8 +1186,11 @@ document.addEventListener('DOMContentLoaded', () => {
         handleCanvasClick(e);
     });
     
-    resetButton.addEventListener('click', initGame);
-    undoButton.addEventListener('click', undo); // 綁定悔棋按鈕
+    resetButton.addEventListener('click', () => {
+        batchInitialState = null; // 重置按鈕會清空批次佈局記憶
+        initGame();
+    });
+    undoButton.addEventListener('click', undo); 
     
     exportPngButton.addEventListener('click', downloadPNG);
     exportCsvButton.addEventListener('click', downloadCSV);
@@ -1230,21 +1198,18 @@ document.addEventListener('DOMContentLoaded', () => {
     confirmLineButton.addEventListener('click', confirmLine);
     cancelLineButton.addEventListener('click', cancelLine);
     
-    // ... (handleGameModeChange 等保持不變)
-
     function handleGameModeChange() {
-        gameMode = gameModeSelect.value;
+        if(gameModeSelect) gameMode = gameModeSelect.value;
         
-        // UI 控制：如果不是 CVC，禁用 AI 1 選擇器 (因為 P1 是人類)
         if (gameMode === 'pvp') {
-             ai1DifficultySelect.disabled = true;
-             ai2DifficultySelect.disabled = true;
+             if(ai1DifficultySelect) ai1DifficultySelect.disabled = true;
+             if(ai2DifficultySelect) ai2DifficultySelect.disabled = true;
         } else if (gameMode === 'pvc') {
-             ai1DifficultySelect.disabled = true;
-             ai2DifficultySelect.disabled = false;
+             if(ai1DifficultySelect) ai1DifficultySelect.disabled = true;
+             if(ai2DifficultySelect) ai2DifficultySelect.disabled = false;
         } else { // cvc
-             ai1DifficultySelect.disabled = false;
-             ai2DifficultySelect.disabled = false;
+             if(ai1DifficultySelect) ai1DifficultySelect.disabled = false;
+             if(ai2DifficultySelect) ai2DifficultySelect.disabled = false;
         }
 
         updateUI();
@@ -1252,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkAndTriggerAIMove();
         }
     }
-    gameModeSelect.addEventListener('change', handleGameModeChange);
+    if(gameModeSelect) gameModeSelect.addEventListener('change', handleGameModeChange);
     
     if (boardRowsInput) {
         boardRowsInput.addEventListener('change', initGame);
@@ -1272,9 +1237,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (startPlayerSelect) {
         startPlayerSelect.addEventListener('change', initGame);
     }
-    // 【新增】AI 難度變更時不重置，只更新變數 (下次 AI 思考時生效)
-    ai1DifficultySelect.addEventListener('change', () => {});
-    ai2DifficultySelect.addEventListener('change', () => {});
+
+    if(ai1DifficultySelect) ai1DifficultySelect.addEventListener('change', () => {});
+    if(ai2DifficultySelect) ai2DifficultySelect.addEventListener('change', () => {});
 
 
     startBatchButton.addEventListener('click', startBatchProcess);
@@ -1284,7 +1249,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 初始化時執行一次模式檢查
     handleGameModeChange(); 
     initGame();
 });
