@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const boardRowsInput = document.getElementById('board-rows');
     const boardColsInput = document.getElementById('board-cols');
     const lineLengthInput = document.getElementById('line-length');
+    // 新增：連線規則選擇器
+    const lineRuleSelect = document.getElementById('line-rule');
     const scoreAgainModeSelect = document.getElementById('score-again-mode');
     
     // AI 難度選擇
@@ -51,6 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let gridRows = 4;
     let gridCols = 4;
     let maxLineLength = 1;
+    // 新增：連線規則變數 (預設 range)
+    let lineRule = 'range'; 
     const DOT_SPACING = 100;
     const PADDING = 50;
     
@@ -153,15 +157,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- 核心初始化邏輯 ---
         if (isBatchRunning && batchInitialState) {
-            // 情況 A: 批次模式且有預存佈局，進行還原
             try {
                 const state = JSON.parse(JSON.stringify(batchInitialState));
                 
                 gridRows = state.gridRows;
                 gridCols = state.gridCols;
                 maxLineLength = state.maxLineLength || 1;
+                // 注意：這裡假設批次處理的規則一致，若需儲存規則狀態需修改 batchInitialState 結構
+                // 這裡簡單讀取當前 UI 設定 (因為批次開始前會設定好)
                 
-                // 更新 UI 數值
                 if (boardRowsInput) boardRowsInput.value = String(gridRows);
                 if (boardColsInput) boardColsInput.value = String(gridCols);
                 if (lineLengthInput) lineLengthInput.value = String(maxLineLength);
@@ -195,7 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
-            // 情況 B: 標準初始化 (一般遊戲 或 批次模式但無佈局)
             initGameStandard();
         }
         
@@ -218,7 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 抽離標準初始化邏輯，避免變數範圍問題
     function initGameStandard() {
         const desiredRows = parseInt(boardRowsInput && boardRowsInput.value ? boardRowsInput.value : '4', 10);
         const desiredCols = parseInt(boardColsInput && boardColsInput.value ? boardColsInput.value : '4', 10);
@@ -236,6 +238,9 @@ document.addEventListener('DOMContentLoaded', () => {
             lineLengthInput.value = String(maxLineLength);
             lineLengthInput.max = maxAllowedLength;
         }
+
+        // 讀取連線規則
+        lineRule = lineRuleSelect ? lineRuleSelect.value : 'range';
         
         const canvasWidth = (gridCols - 1) * DOT_SPACING + PADDING * 2;
         const canvasHeight = (gridRows - 1) * DOT_SPACING + PADDING * 2;
@@ -356,7 +361,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fillStyle = PLAYER_COLORS[sq.player].fill;
                 const radius = 16; 
                 ctx.beginPath();
-                // 增加相容性檢查：如果瀏覽器不支援 roundRect，使用 rect
                 if (ctx.roundRect) {
                     ctx.roundRect(sq.x + 6, sq.y + 6, sq.size - 12, sq.size - 12, radius);
                 } else {
@@ -504,11 +508,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dc = Math.abs(selectedDot1.c - clickedDot.c);
                 const lineLength = Math.max(dr, dc);
                 
+                // 檢查連線是否合法
                 if (!isValidLine(selectedDot1, clickedDot)) {
                     if (dr !== 0 && dc !== 0) {
                         alert("無效的線條 (只能畫橫線或直線)");
-                    } else if (lineLength !== maxLineLength) {
-                        alert(`連線長度必須剛好等於 ${maxLineLength} (目前選擇的長度為 ${lineLength})`);
+                    } else {
+                        // 根據不同規則顯示錯誤訊息
+                        if (lineRule === 'exact') {
+                            alert(`連線長度必須 "剛好等於" ${maxLineLength} (目前長度: ${lineLength})`);
+                        } else {
+                            alert(`連線長度不能超過 ${maxLineLength} (目前長度: ${lineLength})`);
+                        }
                     }
                     selectedDot1 = null;
                 } else {
@@ -587,8 +597,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const lineLength = Math.max(dr, dc);
             if (dr !== 0 && dc !== 0) {
                 alert("無效的線條 (只能畫橫線或直線)");
-            } else if (lineLength !== maxLineLength) {
-                alert(`連線長度必須剛好等於 ${maxLineLength} (目前選擇的長度為 ${lineLength})`);
+            } else {
+                 if (lineRule === 'exact') {
+                    alert(`連線長度必須 "剛好等於" ${maxLineLength} (目前長度: ${lineLength})`);
+                } else {
+                    alert(`連線長度不能超過 ${maxLineLength} (目前長度: ${lineLength})`);
+                }
             }
             cancelLine();
             return;
@@ -806,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
+    // [修改] 核心驗證函式：根據 lineRule 決定條件
     function isValidLine(dotA, dotB) {
         if (!dotA || !dotB) return false;
         const dr = Math.abs(dotA.r - dotB.r);
@@ -814,8 +829,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         const lineLength = Math.max(dr, dc);
-        if (lineLength !== maxLineLength) {
-            return false;
+        
+        if (lineRule === 'exact') {
+            // 嚴格模式：必須相等
+            if (lineLength !== maxLineLength) {
+                return false;
+            }
+        } else {
+            // 範圍模式：允許 1 ~ max
+            if (lineLength > maxLineLength || lineLength < 1) {
+                return false;
+            }
         }
         return true;
     }
@@ -957,6 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const settings = {
                 scoreAndGo: scoreAndGo,
                 maxLineLength: maxLineLength,
+                lineRule: lineRule, // 傳遞規則給 AI
                 difficulty: difficulty 
             };
 
@@ -1226,6 +1251,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lineLengthInput) {
         lineLengthInput.addEventListener('change', initGame);
         lineLengthInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') initGame(); });
+    }
+    // 監聽連線規則改變
+    if (lineRuleSelect) {
+        lineRuleSelect.addEventListener('change', initGame);
     }
     if (scoreAgainModeSelect) {
         scoreAgainModeSelect.addEventListener('change', initGame);
