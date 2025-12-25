@@ -14,6 +14,8 @@ let playerAINumber;
 let playerOpponentNumber;
 let scoreAndGoRule = true;
 let maxLineLength = 1;
+// 新增狀態變數
+let lineRule = 'range'; 
 
 // 棋盤尺寸與點
 let gridRows;
@@ -50,6 +52,7 @@ self.onmessage = function (e) {
     playerOpponentNumber = (playerAINumber === 1) ? 2 : 1;
     scoreAndGoRule = settings.scoreAndGo;
     maxLineLength = settings.maxLineLength;
+    lineRule = settings.lineRule || 'range'; // 讀取設定
     
     gridRows = gameState.gridRows;
     gridCols = gameState.gridCols;
@@ -378,31 +381,52 @@ function sortMovesForMinimax(moves, linesState, squaresState) {
 
 // --- 基礎輔助函式 ---
 
-function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
+// 修改：支援搜尋 1 到 maxLen 之間的所有可能移動，並考慮 lineRule
+function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, maxLen = maxLineLength) {
     const moves = [];
-    if (lineLength === 1) {
+    
+    // 1. 搜尋長度為 1 的連線
+    // 注意：如果 lineRule 是 'exact' 且 maxLen > 1，則不能加入長度為 1 的線段
+    if (lineRule === 'range' || (lineRule === 'exact' && maxLen === 1)) {
         for (const id in linesObj) {
             if (linesObj[id].players.length === 0) {
                 const seg = linesObj[id];
                 moves.push({ dotA: seg.p1, dotB: seg.p2, segments: [seg] });
             }
         }
-    } else {
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                const dotA = dots[r][c];
-                if (c + lineLength < cols) {
-                    const dotB = dots[r][c + lineLength];
-                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
-                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
-                        moves.push({ dotA, dotB, segments });
+    }
+
+    // 2. 搜尋長度 > 1 的連線
+    if (maxLen > 1) {
+        // 決定搜尋迴圈的起始與結束
+        // 如果是 range: 2 到 maxLen
+        // 如果是 exact: 只搜尋 maxLen
+        let startL = (lineRule === 'exact') ? maxLen : 2;
+        let endL = maxLen;
+
+        for (let l = startL; l <= endL; l++) {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const dotA = dots[r][c];
+                    
+                    // 橫向檢查 (Horizontal)
+                    if (c + l < cols) {
+                        const dotB = dots[r][c + l];
+                        // 檢查中間是否有被佔用的線段 (規則：必須至少覆蓋一個未佔用的線段)
+                        const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                        // 只要路徑有效，且至少包含一個未被佔領的線段，就是合法移動
+                        if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                            moves.push({ dotA, dotB, segments });
+                        }
                     }
-                }
-                if (r + lineLength < rows) {
-                    const dotB = dots[r + lineLength][c];
-                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
-                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
-                        moves.push({ dotA, dotB, segments });
+                    
+                    // 縱向檢查 (Vertical)
+                    if (r + l < rows) {
+                        const dotB = dots[r + l][c];
+                        const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                        if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                            moves.push({ dotA, dotB, segments });
+                        }
                     }
                 }
             }
