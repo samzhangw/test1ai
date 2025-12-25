@@ -116,9 +116,18 @@
                         </div>
 
                         <div id="line-length-selector">
-                            <label for="line-length">連線長度</label>
+                            <label for="line-length">連線長度 (N)</label>
                             <input id="line-length" type="number" min="1" max="10" value="1" />
                         </div>
+
+                        <div id="line-rule-selector">
+                            <label for="line-rule">連線規則</label>
+                            <select id="line-rule">
+                                <option value="range" selected>允許範圍 (1 ~ N)</option>
+                                <option value="exact">固定長度 (必須 = N)</option>
+                            </select>
+                        </div>
+
                         <div id="score-again-selector">
                             <label for="score-again-mode">連續得分規則</label>
                             <select id="score-again-mode">
