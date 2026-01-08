@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const player1ScoreBox = document.getElementById('player1-score');
     const player2ScoreBox = document.getElementById('player2-score');
     
-    // [新增] 取得回合顯示元素
+    // [UI] 取得回合顯示元素
     const turnBadge = document.getElementById('turn-badge');
 
     const gameOverMessage = document.getElementById('game-over-message');
@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 歷史紀錄列表
     const historyListElement = document.getElementById('history-list');
 
-    // ... (中間省略，保持原有的 AI Worker 初始化與變數宣告) ...
     // AI Web Worker
     let aiWorker;
     let aiRequestId = 0; 
@@ -119,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 結構範例: { "4_4": { "0,0": 5, ... }, "5_5": { ... } }
     let boardStorage = {}; 
 
-    // ... (省略 handleWorkerMessage, loadCloudData 等函式，保持不變) ...
+    // --- AI Worker 訊息處理 ---
     function handleWorkerMessage(e) {
         const { type, dotA, dotB, requestId } = e.data;
         if (requestId !== undefined && requestId !== aiRequestId) return;
@@ -146,6 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("AI 運算時發生嚴重錯誤，請重設遊戲。");
         }
     }
+
+    // --- API 讀寫功能 (Fetch) ---
 
     function loadCloudData() {
         if (!API_URL || API_URL.includes("您的ID")) {
@@ -220,8 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 遊戲核心函式 ---
-    
-    // ... (initGame, initGameStandard, drawCanvas 等函式保持不變，turnCounter 在 initGame 中已重置為 1) ...
 
     function initGame() {
         if (isBatchRunning) {
@@ -418,8 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         totalSquares = squares.length;
     }
-
-    // ... (animationLoop, drawCanvas 等函式保持不變) ...
+    
     function animationLoop(timestamp) {
         if (animationStartTime === 0) animationStartTime = timestamp;
         const elapsed = timestamp - animationStartTime;
@@ -449,8 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDotRadius = DOT_RADIUS; 
         drawCanvasInternal();
     }
-    
-    // ... (drawCanvasInternal, handleCanvasClick 等函式保持不變) ...
+
     function drawCanvasInternal() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -741,47 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderHistory(); // 重新渲染歷史紀錄
     }
 
-    // ... (renderHistory, confirmLine 等函式保持不變) ...
-    
-    // [修改] updateUI 函式來反映回合數
-    function updateUI() {
-        const player1Name = getPlayerName(1);
-        const player2Name = getPlayerName(2);
-        
-        // 更新分數與名稱
-        if(player1ScoreBox) {
-            player1ScoreBox.querySelector('.p-label').textContent = player1Name;
-            player1ScoreBox.querySelector('#score1').textContent = scores[1];
-            // 更新點數總和
-            const p1DotElem = document.getElementById('p1-dot-sum');
-            if(p1DotElem) p1DotElem.textContent = scores.p1Dots;
-        }
-        if(player2ScoreBox) {
-            player2ScoreBox.querySelector('.p-label').textContent = player2Name;
-            player2ScoreBox.querySelector('#score2').textContent = scores[2];
-            // 更新點數總和
-            const p2DotElem = document.getElementById('p2-dot-sum');
-            if(p2DotElem) p2DotElem.textContent = scores.p2Dots;
-        }
-
-        // [修改] 更新回合數顯示
-        if (turnBadge) {
-            turnBadge.textContent = `回合 ${turnCounter}`;
-            // 加入簡單動畫
-            turnBadge.classList.remove('updated');
-            void turnBadge.offsetWidth; // 觸發 reflow
-            turnBadge.classList.add('updated');
-        }
-
-        if (currentPlayer === 1) {
-            if(player1ScoreBox) player1ScoreBox.classList.add('active');
-            if(player2ScoreBox) player2ScoreBox.classList.remove('active', 'player2');
-        } else {
-            if(player1ScoreBox) player1ScoreBox.classList.remove('active');
-            if(player2ScoreBox) player2ScoreBox.classList.add('active', 'player2');
-        }
-    }
-
+    // --- 渲染歷史紀錄面板 ---
     function renderHistory() {
         if (!historyListElement) return;
         historyListElement.innerHTML = ''; // 清空
@@ -936,24 +893,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
     }
     
+    // [CSV 更新] 加入 Equation 與 MoveSum 欄位
     function generateCSVString() {
         if (moveHistory.length === 0) return null;
         const p1Name = getPlayerName(1);
         const p2Name = getPlayerName(2);
-        // [新增] Equation 欄位
+        
+        // 增加 Equation 與 MoveSum 標題
         const headers = `Turn,Player,Move (From R_C),Equation,Scored,MoveSum,${p1Name} Score,${p2Name} Score,${p1Name} TotalDots,${p2Name} TotalDots`;
+        
         let csvContent = headers + "\n";
         moveHistory.forEach(move => {
             const vA = move.valA !== undefined ? move.valA : '?';
             const vB = move.valB !== undefined ? move.valB : '?';
             
             const row = [
-                move.turn, 
+                move.turn, // 這是符合「得分不加回合數」邏輯的數值
                 move.player, 
                 `"${move.move}"`, 
-                `"${vA} + ${vB}"`, // 顯示算式
+                `"${vA} + ${vB}"`, // 顯示算式，例如 "5 + 3"
                 move.scored, 
-                move.moveSum || 0,
+                move.moveSum || 0, // 顯示該次連線得分
                 move.scoreP1, 
                 move.scoreP2,
                 move.p1TotalDots, 
@@ -1022,7 +982,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 核心邏輯：若沒有 (得分 且 允許續手)，則回合數 + 1
-        // 也就是說：如果得分且允許續手，turnCounter 保持不變
         if (!(scored && scoreAndGo)) turnCounter++;
     }
 
@@ -1082,6 +1041,42 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     }
 
+    // [UI] 更新 UI，同步顯示回合數
+    function updateUI() {
+        const player1Name = getPlayerName(1);
+        const player2Name = getPlayerName(2);
+        
+        // 更新分數與名稱
+        if(player1ScoreBox) {
+            player1ScoreBox.querySelector('.p-label').textContent = player1Name;
+            player1ScoreBox.querySelector('#score1').textContent = scores[1];
+            const p1DotElem = document.getElementById('p1-dot-sum');
+            if(p1DotElem) p1DotElem.textContent = scores.p1Dots;
+        }
+        if(player2ScoreBox) {
+            player2ScoreBox.querySelector('.p-label').textContent = player2Name;
+            player2ScoreBox.querySelector('#score2').textContent = scores[2];
+            const p2DotElem = document.getElementById('p2-dot-sum');
+            if(p2DotElem) p2DotElem.textContent = scores.p2Dots;
+        }
+
+        // 更新回合數徽章
+        if (turnBadge) {
+            turnBadge.textContent = `回合 ${turnCounter}`;
+            turnBadge.classList.remove('updated');
+            void turnBadge.offsetWidth; // 觸發重繪動畫
+            turnBadge.classList.add('updated');
+        }
+
+        if (currentPlayer === 1) {
+            if(player1ScoreBox) player1ScoreBox.classList.add('active');
+            if(player2ScoreBox) player2ScoreBox.classList.remove('active', 'player2');
+        } else {
+            if(player1ScoreBox) player1ScoreBox.classList.remove('active');
+            if(player2ScoreBox) player2ScoreBox.classList.add('active', 'player2');
+        }
+    }
+
     function getWinnerMessage() {
         const player1Name = getPlayerName(1);
         const player2Name = getPlayerName(2);
@@ -1093,6 +1088,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function endGame() {
         aiThinkingIndicator.classList.add('hidden');
         if (isBatchRunning) {
+            // 批次運算時，也會匯出包含新欄位的 CSV
             const csvData = generateCSVString();
             if (csvData) batchZip.file(`game_${currentGameNumber}/history.csv`, "\uFEFF" + csvData);
             currentGameNumber++;
@@ -1219,7 +1215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isBatchRunning) drawCanvas();
         updateUI();
 
-        // [新增] 傳入 valA, valB, moveSum
+        // [記錄] 傳入 valA, valB, moveSum 供歷史紀錄與 CSV 使用
         logMove(dotA, dotB, scoredThisTurn, valA, valB, moveSum); 
 
         if (totalFilledSquares === totalSquares) {
@@ -1236,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ... (批次處理相關函式與事件綁定保持不變) ...
+    // --- 批次處理函式 ---
 
     function startBatchProcess() {
         if (typeof JSZip === 'undefined') {
