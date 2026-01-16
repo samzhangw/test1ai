@@ -557,7 +557,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fill();
 
                 const dotNumber = dots[r][c].number;
-                if (dotNumber !== undefined) {
+                // [修改] 增加檢查 dotNumber 不為 null
+                if (dotNumber !== undefined && dotNumber !== null) {
                     const fontSize = Math.max(8, Math.floor(currentDotRadius * 1.1)); 
                     ctx.font = `bold ${fontSize}px var(--font-body, sans-serif)`;
                     ctx.fillStyle = DOT_TEXT_COLOR; 
@@ -585,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
              ctx.save();
              ctx.fillStyle = "#ef4444";
              ctx.font = "bold 16px sans-serif";
-             ctx.fillText("編輯模式：點擊圓點修改數字", 20, 20);
+             ctx.fillText("編輯模式：點擊圓點修改數字（空白可清空）", 20, 20);
              ctx.restore();
         }
     }
@@ -667,10 +668,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const clickedDot = findNearestDot(mouseX, mouseY);
         
         if (clickedDot) {
-            const currentNum = clickedDot.number || 0;
-            const newNumStr = prompt(`請輸入 (${clickedDot.r},${clickedDot.c}) 的數字:`, currentNum);
+            // [修改] 如果目前為 null/undefined 則顯示空字串
+            const currentNum = (clickedDot.number !== null && clickedDot.number !== undefined) ? clickedDot.number : "";
+            const newNumStr = prompt(`請輸入 (${clickedDot.r},${clickedDot.c}) 的數字 (保持空白即為清空):`, currentNum);
             
             if (newNumStr !== null) {
+                // [新增] 檢查是否為空字串，若是則設為 null (清空)
+                if (newNumStr.trim() === "") {
+                    clickedDot.number = null;
+
+                    // 存入 boardStorage (設為 null)
+                    const currentSizeKey = `${gridRows}_${gridCols}`;
+                    if (!boardStorage[currentSizeKey]) {
+                        boardStorage[currentSizeKey] = {};
+                    }
+                    const dotKey = `${clickedDot.r},${clickedDot.c}`;
+                    boardStorage[currentSizeKey][dotKey] = null;
+                    
+                    drawCanvas();
+                    saveCloudData(); 
+                    return;
+                }
+
                 const newNum = parseInt(newNumStr, 10);
                 if (!isNaN(newNum)) {
                     clickedDot.number = newNum;
