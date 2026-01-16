@@ -451,9 +451,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawCanvasInternal() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 繪製方塊
+        // 繪製方塊與剩餘線數提示
         squares.forEach(sq => {
             if (sq.filled) {
+                // 1. 已填滿狀態的繪製
                 ctx.fillStyle = PLAYER_COLORS[sq.player].fill;
                 const radius = 16; 
                 ctx.beginPath();
@@ -475,6 +476,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 else playerLabel = "P" + sq.player;
                 
                 ctx.fillText(playerLabel, sq.x + sq.size / 2, sq.y + sq.size / 2);
+            } else {
+                // 2. 未填滿狀態：計算並顯示剩餘邊數
+                let drawnCount = 0;
+                sq.lineKeys.forEach(key => {
+                    if (lines[key] && lines[key].players.length > 0) drawnCount++;
+                });
+                const remaining = 4 - drawnCount;
+
+                // 只有當剩下 1, 2, 3 邊時顯示比較有意義，4邊全空時也可以顯示
+                // 樣式：淡灰色數字，位於方塊中央
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'; // slate-400 with opacity
+                ctx.font = 'bold 28px "Space Grotesk", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(remaining, sq.x + sq.size / 2, sq.y + sq.size / 2);
             }
         });
 
