@@ -48,6 +48,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 歷史紀錄列表
     const historyListElement = document.getElementById('history-list');
 
+    // [新增] 多重連鎖模式變數
+    let isChainSearching = false;
+    let chainThreshold = 6; 
+    let searchTargetCount = 3; 
+    let foundChains = []; 
+
+    const findChainButton = document.getElementById('find-chain-button');
+    const chainThresholdInput = document.getElementById('chain-threshold');
+    const searchCountInput = document.getElementById('search-count');
+    const chainStatus = document.getElementById('chain-status');
+    const chainResultsArea = document.getElementById('chain-results-area');
+    const chainResultsList = document.getElementById('chain-results-list');
+
     // AI Web Worker
     let aiWorker;
     let aiRequestId = 0; 
@@ -223,6 +236,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 遊戲核心函式 ---
 
     function initGame() {
+        // [新增] 只有當「完全沒有」在搜尋時，才重置 UI 按鈕
+        // 這樣可以避免在循環搜尋過程中，按鈕一直閃爍或被重置
+        if (!isChainSearching && findChainButton) {
+            if(chainStatus) chainStatus.classList.add('hidden');
+            if(chainResultsArea) chainResultsArea.classList.add('hidden');
+            if(findChainButton) {
+                findChainButton.disabled = false;
+                findChainButton.innerHTML = '<span class="btn-icon">⚡</span> 開始自動搜尋';
+            }
+        }
+
         if (isBatchRunning) {
             gameMode = 'cvc';
             if (gameModeSelect) gameModeSelect.value = 'cvc';
@@ -236,6 +260,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (gameModeSelect) gameMode = gameModeSelect.value;
             ANIMATION_DURATION = 500;
+        }
+
+        // [新增] 連鎖模式強制關閉動畫
+        if (isChainSearching) {
+            ANIMATION_DURATION = 0;
         }
 
         if (isBatchRunning && batchInitialState) {
@@ -292,11 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDotRadius = 0;
         canvas.style.pointerEvents = 'none';
         
-        if (isBatchRunning || ANIMATION_DURATION === 0) {
+        // [新增] 包含 isChainSearching 的條件判斷
+        if (isBatchRunning || isChainSearching || ANIMATION_DURATION === 0) {
             isAnimating = false;
             currentDotRadius = DOT_RADIUS;
             drawCanvasInternal(); 
-            if (gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) {
+            // 如果是 CVC 或是 ChainSearch 或是 PVC 的電腦回合，觸發 AI
+            if (gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2) || isChainSearching) {
                  checkAndTriggerAIMove();
             }
         } else {
@@ -1147,12 +1178,204 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+
+    // --- [升級版] 多重連鎖偵測演算法 ---
+
+    // 啟動連鎖搜尋
+    function startChainSearch() {
+        if (isChainSearching) return;
+        
+        const threshold = parseInt(chainThresholdInput.value, 10);
+        const count = parseInt(searchCountInput ? searchCountInput.value : '1', 10);
+        
+        if (isNaN(threshold) || threshold < 1) { alert("請輸入有效的連鎖格數"); return; }
+        if (isNaN(count) || count < 1) { alert("請輸入有效的搜尋數量"); return; }
+
+        chainThreshold = threshold;
+        searchTargetCount = count;
+        isChainSearching = true;
+        foundChains = []; // 清空之前的結果
+
+        // UI 初始化
+        findChainButton.disabled = true;
+        findChainButton.innerHTML = '<span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid white;border-top-color:transparent;border-radius:50%;margin-right:5px;"></span> 搜尋中...';
+        chainStatus.classList.remove('hidden');
+        chainStatus.textContent = `正在搜尋第 1 / ${searchTargetCount} 個機會...`;
+        chainStatus.style.color = "var(--color-text-muted)";
+        
+        if(chainResultsArea) chainResultsArea.classList.remove('hidden');
+        if(chainResultsList) chainResultsList.innerHTML = ''; // 清空列表
+
+        // 強制設定為 CVC 模式，且使用最強 AI (Minimax)
+        if (gameModeSelect) gameModeSelect.value = 'cvc';
+        gameMode = 'cvc';
+        if (ai1DifficultySelect) ai1DifficultySelect.value = 'minimax';
+        if (ai2DifficultySelect) ai2DifficultySelect.value = 'minimax';
+        if (scoreAgainModeSelect) scoreAgainModeSelect.value = 'yes';
+        
+        // 關閉動畫
+        ANIMATION_DURATION = 0;
+        initGame(); // 開始第一場
+    }
+
+    // 儲存找到的局面
+    function saveFoundChain(len) {
+        // 建立當前狀態的快照
+        const snapshot = {
+            lines: JSON.parse(JSON.stringify(lines)),
+            squares: JSON.parse(JSON.stringify(squares)),
+            scores: { ...scores },
+            currentPlayer: currentPlayer,
+            moveHistory: JSON.parse(JSON.stringify(moveHistory)),
+            dots: JSON.parse(JSON.stringify(dots)),
+            gridRows: gridRows,
+            gridCols: gridCols,
+            turnCounter: turnCounter
+        };
+        
+        foundChains.push({
+            id: foundChains.length,
+            len: len,
+            snapshot: snapshot,
+            turn: turnCounter
+        });
+
+        // 新增到 UI 列表
+        renderChainResultItem(foundChains[foundChains.length - 1]);
+    }
+
+    // 在列表中顯示一個結果
+    function renderChainResultItem(item) {
+        if (!chainResultsList) return;
+        const btn = document.createElement('button');
+        btn.className = 'btn secondary shadow-effect';
+        btn.style.textAlign = 'left';
+        btn.style.fontSize = '0.9rem';
+        btn.style.padding = '8px 12px';
+        btn.style.justifyContent = 'space-between';
+        btn.style.border = '1px solid #10b981'; // 綠色邊框表示成功
+        btn.style.background = '#f0fdf4';
+        
+        btn.innerHTML = `
+            <span><strong>機會 #${item.id + 1}</strong>: 可連吃 <span style="color:#059669; font-weight:bold; font-size:1.1rem;">${item.len}</span> 格</span>
+            <span style="font-size:0.75rem; color:#64748b;">(第 ${item.turn} 回合)</span>
+        `;
+        
+        btn.onclick = () => loadChainState(item.id);
+        chainResultsList.appendChild(btn);
+        
+        // 自動捲動到底部
+        chainResultsList.scrollTop = chainResultsList.scrollHeight;
+    }
+
+    // 載入指定的局面
+    function loadChainState(index) {
+        const item = foundChains[index];
+        if (!item) return;
+
+        // 停止搜尋狀態
+        isChainSearching = false;
+        findChainButton.disabled = false;
+        findChainButton.innerHTML = '<span class="btn-icon">⚡</span> 開始自動搜尋';
+        chainStatus.textContent = `已載入機會 #${index + 1}，請開始連線！`;
+        chainStatus.style.color = "#10b981";
+
+        // 還原狀態
+        const state = item.snapshot;
+        lines = JSON.parse(JSON.stringify(state.lines));
+        squares = JSON.parse(JSON.stringify(state.squares));
+        scores = { ...state.scores };
+        currentPlayer = state.currentPlayer; // 保持當前輪到的玩家
+        moveHistory = JSON.parse(JSON.stringify(state.moveHistory));
+        dots = JSON.parse(JSON.stringify(state.dots));
+        gridRows = state.gridRows;
+        gridCols = state.gridCols;
+        turnCounter = state.turnCounter;
+
+        // 設定為 PVC 模式讓玩家接手
+        gameMode = 'pvc';
+        if (gameModeSelect) gameModeSelect.value = 'pvc';
+        
+        // 恢復 UI
+        ANIMATION_DURATION = 500;
+        canvas.style.pointerEvents = 'auto';
+        actionBar.classList.add('hidden');
+        aiThinkingIndicator.classList.add('hidden');
+        
+        drawCanvas();
+        updateUI();
+        renderHistory();
+        
+        alert(`已載入！預計可連吃 ${item.len} 格。\n現在輪到 ${getPlayerName(currentPlayer)}。\n(請尋找只有 3 邊的格子下手)`);
+    }
+
+    // 停止搜尋 (全部完成或強制停止)
+    function finishChainSearch(forced = false) {
+        isChainSearching = false;
+        findChainButton.disabled = false;
+        findChainButton.innerHTML = '<span class="btn-icon">⚡</span> 開始自動搜尋';
+        
+        if (forced) {
+            chainStatus.textContent = "搜尋已終止。";
+            chainStatus.style.color = "#ef4444";
+        } else {
+            chainStatus.textContent = `搜尋完成！共找到 ${foundChains.length} 個機會。`;
+            chainStatus.style.color = "#3b82f6";
+        }
+        
+        // 恢復基本互動 (但不自動載入任何局，讓使用者自己選)
+        ANIMATION_DURATION = 500;
+        if(gameModeSelect) gameModeSelect.value = 'pvc'; 
+        gameMode = 'pvc';
+    }
+
+    // [貪婪演算法] 檢查盤面機會
+    function checkForChainOpportunity() {
+        const simLines = JSON.parse(JSON.stringify(lines));
+        const simSquares = JSON.parse(JSON.stringify(squares));
+        return countGreedyChain(simLines, simSquares);
+    }
+    
+    function getSidesCount(sq, currentLines) {
+        let count = 0;
+        sq.lineKeys.forEach(k => {
+            if (currentLines[k].players.length > 0) count++;
+        });
+        return count;
+    }
+
+    function countGreedyChain(currentLines, currentSquares) {
+        let score = 0;
+        let keepGoing = true;
+        while (keepGoing) {
+            keepGoing = false;
+            const targetSq = currentSquares.find(sq => !sq.filled && getSidesCount(sq, currentLines) === 3);
+            if (targetSq) {
+                const missingLineKey = targetSq.lineKeys.find(k => currentLines[k].players.length === 0);
+                if (missingLineKey) {
+                    currentLines[missingLineKey].players.push(999);
+                    targetSq.filled = true;
+                    score++;
+                    currentSquares.forEach(s => {
+                         if (!s.filled && s.lineKeys.includes(missingLineKey)) {
+                             if (getSidesCount(s, currentLines) === 4) {
+                                 s.filled = true;
+                                 score++;
+                             }
+                         }
+                    });
+                    keepGoing = true;
+                }
+            }
+        }
+        return score;
+    }
     
     // --- AI 相關函式 ---
 
     function checkAndTriggerAIMove() {
         if ((gameMode === 'cvc' || (gameMode === 'pvc' && currentPlayer === 2)) && !isGameOver() && !isAnimating) {
-            if (!isBatchRunning) {
+            if (!isBatchRunning && !isChainSearching) {
                 canvas.style.pointerEvents = 'none';
                 actionBar.classList.add('hidden');
                 aiThinkingIndicator.classList.remove('hidden');
@@ -1197,7 +1420,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
         } else {
-            if (!isBatchRunning && (gameMode === 'pvp' || (gameMode === 'pvc' && currentPlayer === 1))) {
+            if (!isBatchRunning && !isChainSearching && (gameMode === 'pvp' || (gameMode === 'pvc' && currentPlayer === 1))) {
                 if(!isEditMode) canvas.style.pointerEvents = 'auto';
             }
         }
@@ -1247,23 +1470,58 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sq.filled) totalFilledSquares++;
         });
         
-        if (!isBatchRunning) drawCanvas();
+        if (!isBatchRunning && !isChainSearching) drawCanvas();
         updateUI();
 
         // [記錄] 傳入 valA, valB, moveSum 供歷史紀錄與 CSV 使用
         logMove(dotA, dotB, scoredThisTurn, valA, valB, moveSum); 
 
+        // [修改開始] 多重連鎖偵測邏輯 ---------------------------
+        
         if (totalFilledSquares === totalSquares) {
             endGame();
+            if (isChainSearching) {
+                // 如果這局沒找到機會就結束了，直接重開一局繼續搜
+                setTimeout(initGame, 10);
+            }
             return;
         }
+
+        // --- 多重連鎖模式邏輯 ---
+        if (isChainSearching) {
+            const chainLen = checkForChainOpportunity();
+            
+            // 更新狀態文字
+            if (chainStatus) {
+                chainStatus.textContent = `搜尋中 (${foundChains.length}/${searchTargetCount})... 當前最大連鎖: ${chainLen}`;
+            }
+            
+            // 發現機會！
+            if (chainLen >= chainThreshold) {
+                saveFoundChain(chainLen); // 1. 存檔
+                
+                // 2. 檢查是否達標
+                if (foundChains.length >= searchTargetCount) {
+                    finishChainSearch(false); // 完成！
+                    return; // 停止 AI
+                } else {
+                    // 還沒達標，直接重開一局繼續搜
+                    setTimeout(initGame, 10);
+                    return; // 停止這一局的 AI
+                }
+            }
+        }
+        // ------------------------------------
 
         if (scoredThisTurn && scoreAndGo) {
             checkAndTriggerAIMove(); 
         } else {
             switchPlayer();
-            if (gameMode === 'cvc') checkAndTriggerAIMove(); 
-            else if (!isAnimating && !isBatchRunning) canvas.style.pointerEvents = 'auto';
+            if (gameMode === 'cvc' || isChainSearching) { 
+                setTimeout(checkAndTriggerAIMove, 2); 
+            } else if (!isAnimating && !isBatchRunning) {
+                canvas.style.pointerEvents = 'auto';
+            }
         }
     }
 
@@ -1435,6 +1693,11 @@ document.addEventListener('DOMContentLoaded', () => {
     stopBatchButton.addEventListener('click', () => {
         if (confirm('您確定要停止批次處理嗎？')) stopBatchProcess(true);
     });
+
+    // [新增] 綁定連鎖搜尋按鈕
+    if (findChainButton) {
+        findChainButton.addEventListener('click', startChainSearch);
+    }
 
     handleGameModeChange(); 
     initGame();
