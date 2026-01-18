@@ -1,16 +1,8 @@
 /**
  * ============================================
- * AI Web Worker (ai-worker.js)
- * * 包含所有 AI 運算 lógica:
- * 1. Minimax 演算法 (NegaMax 變體)
- * 2. 帶有時間限制的 迭代加深 (Iterative Deepening)
- * 3. 置換表 (Transposition Table)
- * 4. 根據規則切換策略的 啟發式評估 (Heuristic)
- * 5. 靜態搜尋 (Quiescence Search) - 整合於啟發函數中
- * 6. 支援「得分後再走一步」的 Minimax
- * 7. (**** 新功能 ****) 策略隨機性 (在多個最佳解中隨機選取)
- * * 【已修改】
- * 8. 支援 maxLineLength > 1 的啟發式搜尋
+ * AI Web Worker (ai-worker.js) - 智能策略優化版
+ * * 優化：在得分時，優先選擇能「延續連鎖」的步數
+ * * 優化：避免在得分同時製造出對手未來的機會 (2邊格)
  * ============================================
  */
 
@@ -22,29 +14,37 @@ let playerAINumber;
 let playerOpponentNumber;
 let scoreAndGoRule = true;
 let maxLineLength = 1;
+// 新增狀態變數
+let lineRule = 'range'; 
 
-// 【新增】棋盤尺寸與點
+// 棋盤尺寸與點
 let gridRows;
 let gridCols;
 let aiDots = [];
+
+// 預先排序 Key
+let sortedLineKeys = [];
 
 // AI 效能與快取
 let transpositionTable = new Map();
 let ttHits = 0; 
 
-const MAX_SEARCH_DEPTH = 22;
-const TIME_LIMIT_MS = 2500;
+// 搜尋設定
+const MAX_SEARCH_DEPTH = 30; 
+const TIME_LIMIT_MS = 1000; 
 
-const HEURISTIC_WIN_SCORE = 1000000;
-const HEURISTIC_SQUARE_VALUE = 1000;
-const HEURISTIC_CRITICAL_MOVE_PENALTY = 500;
-const HEURISTIC_MINOR_MOVE_PENALTY = 50;
+// 評估分數權重
+const HEURISTIC_WIN_SCORE = 10000000;
+const HEURISTIC_SQUARE_VALUE = 5000;
+const HEURISTIC_CRITICAL_MOVE_PENALTY = 800; 
+const HEURISTIC_MINOR_MOVE_PENALTY = 200; 
+const HEURISTIC_CHAIN_BONUS = 500;
 
 // --- Web Worker 入口 ---
 self.onmessage = function (e) {
-    const { gameState, settings } = e.data;
+    const { gameState, settings, requestId } = e.data; // 接收 requestId
 
-    // 1. 初始化 AI 的內部狀態
+    // 1. 初始化
     aiLines = gameState.lines;
     aiSquares = gameState.squares;
     aiScores = { 1: gameState.scores[1], 2: gameState.scores[2] };
@@ -52,8 +52,8 @@ self.onmessage = function (e) {
     playerOpponentNumber = (playerAINumber === 1) ? 2 : 1;
     scoreAndGoRule = settings.scoreAndGo;
     maxLineLength = settings.maxLineLength;
+    lineRule = settings.lineRule || 'range'; // 讀取設定
     
-    // 【新增】取得棋盤尺寸並產生 aiDots
     gridRows = gameState.gridRows;
     gridCols = gameState.gridCols;
     aiDots = [];
@@ -64,57 +64,50 @@ self.onmessage = function (e) {
         }
     }
 
+    sortedLineKeys = Object.keys(aiLines).sort();
     transpositionTable.clear(); 
     ttHits = 0;
 
-    // 2. 決定 AI 策略
-    // 【修改】
-    const availableMoves = getAvailableMoves(); // 參數現在是全域的
+    // 2. 決定策略
+    const availableMoves = getAvailableMoves();
+    const difficulty = settings.difficulty || 'minimax'; 
     
     let bestMove;
 
-    if (maxLineLength > 1 || availableMoves.length > 24) {
-        // 【修改】
-        bestMove = findBestMoveHeuristic(availableMoves); // 參數現在是全域的
+    if (difficulty === 'greedy') {
+        bestMove = findBestMoveHeuristic(availableMoves);
     } else {
-        // 【修改】
-        bestMove = findBestMoveMinimaxIterative(availableMoves); // 參數現在是全域的
+        bestMove = findBestMoveMinimaxIterative(availableMoves);
     }
     
-    // 3. 傳回找到的最佳移動
+    // 3. 傳回結果 (包含 requestId)
     if (bestMove && bestMove.dotA && bestMove.dotB) {
         self.postMessage({
             type: 'bestMoveFound',
             dotA: bestMove.dotA,
-            dotB: bestMove.dotB
+            dotB: bestMove.dotB,
+            requestId: requestId
         });
     } else {
-        self.postMessage({ type: 'noMoveFound' });
+        self.postMessage({ type: 'noMoveFound', requestId: requestId });
     }
 };
 
 /**
- * 【已修改】
- * 策略 1: 淺層啟發式搜尋 (1-ply)
- * - 現在接收 {dotA, dotB, segments} 格式的 moves
+ * 策略 1: 貪婪啟發式 (簡單)
  */
 function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = aiSquares) {
     if (availableMoves.length === 0) return null;
     
     let winningMoves = [];
     let safeMoves = [];
-    let minorUnsafeMoves = [];
-    let criticalUnsafeMoves = [];
+    let badMoves = []; 
     
-    // 1. 評估所有 "dot-pair" 移動
     for (const move of availableMoves) {
         let squaresCompleted = 0;
-        let isCritical = false; // 會製造出 3 邊
-        let isMinor = false;    // 會製造出 2 邊
+        let isBad = false;    
         
         let uniqueAdjacentSquares = new Set();
-
-        // 檢查此 move 包含的所有 1-length segments
         for (const segment of move.segments) {
             const adjacentSquares = getAdjacentSquares(segment.id, squaresObj);
             adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
@@ -122,151 +115,112 @@ function findBestMoveHeuristic(availableMoves, linesObj = aiLines, squaresObj = 
 
         for (const sq of uniqueAdjacentSquares) {
             if (sq.filled) continue;
-            
-            // 模擬畫上 *所有* segments 後的狀態
             let sidesAfterMove = 0;
             sq.lineKeys.forEach(key => {
-                if (linesObj[key].players.length > 0) {
-                    sidesAfterMove++;
-                } else if (move.segments.some(seg => seg.id === key)) {
-                    // 這是此 move 會畫上的線
-                    sidesAfterMove++;
-                }
+                if (linesObj[key].players.length > 0) sidesAfterMove++;
+                else if (move.segments.some(seg => seg.id === key)) sidesAfterMove++;
             });
 
-            if (sidesAfterMove === 4) {
-                squaresCompleted++;
-            } else if (sidesAfterMove === 3) {
-                isCritical = true;
-            } else if (sidesAfterMove === 2) {
-                isMinor = true;
-            }
+            if (sidesAfterMove === 4) squaresCompleted++;
+            else if (sidesAfterMove === 3) isBad = true; 
         }
         
-        const moveInfo = { move, squaresCompleted, isCritical, isMinor };
+        const moveInfo = { move, squaresCompleted };
         
         if (squaresCompleted > 0) winningMoves.push(moveInfo);
-        else if (isCritical) criticalUnsafeMoves.push(moveInfo);
-        else if (isMinor) minorUnsafeMoves.push(moveInfo);
-        else safeMoves.push(moveInfo);
+        else if (!isBad) safeMoves.push(moveInfo);
+        else badMoves.push(moveInfo);
     }
     
-    let bestDotMove;
-    
-    // 2. 根據優先級選擇
     if (winningMoves.length > 0) {
-        // 選能拿最多分的
         const maxScore = Math.max(...winningMoves.map(m => m.squaresCompleted));
-        const bestWinningMoves = winningMoves.filter(m => m.squaresCompleted === maxScore);
-        bestDotMove = bestWinningMoves[Math.floor(Math.random() * bestWinningMoves.length)].move;
-
-    } else if (safeMoves.length > 0) {
-        // 隨機選一個安全的
-        bestDotMove = safeMoves[Math.floor(Math.random() * safeMoves.length)].move;
-        
-    } else if (minorUnsafeMoves.length > 0) {
-        // 隨機選一個次要風險的
-        bestDotMove = minorUnsafeMoves[Math.floor(Math.random() * minorUnsafeMoves.length)].move;
-        
-    } else if (criticalUnsafeMoves.length > 0) {
-        // 【簡化】: 多格連線的連鎖計算太複雜，暫時先隨機選一個
-        bestDotMove = criticalUnsafeMoves[Math.floor(Math.random() * criticalUnsafeMoves.length)].move;
-        
-    } else if (availableMoves.length > 0) {
-        bestDotMove = availableMoves[0];
-    } else {
-        return null; // 真的沒地方走了
+        const best = winningMoves.filter(m => m.squaresCompleted === maxScore);
+        return { ...best[Math.floor(Math.random() * best.length)].move };
+    } 
+    if (safeMoves.length > 0) {
+        return { ...safeMoves[Math.floor(Math.random() * safeMoves.length)].move };
     }
-
-    if (!bestDotMove) return null;
-    return { dotA: bestDotMove.dotA, dotB: bestDotMove.dotB };
+    if (badMoves.length > 0) {
+        return { ...badMoves[Math.floor(Math.random() * badMoves.length)].move };
+    }
+    return { ...availableMoves[0] };
 }
 
-// --- 【已修改】策略 2: Minimax (迭代加深版) ---
+// --- 策略 2: Minimax (智能) ---
 function findBestMoveMinimaxIterative(availableMoves) {
     const startTime = performance.now();
     let maxDepth = Math.min(MAX_SEARCH_DEPTH, availableMoves.length);
     
-    let overallBestMove = null; // 儲存上一個「已完成」深度的最佳解
+    let overallBestMove = null; 
     
-    // 1. 迭代加深迴圈
     for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
         
-        if (currentDepth > 1 && (performance.now() - startTime > TIME_LIMIT_MS)) {
-            break; 
-        }
+        if (currentDepth > 1 && (performance.now() - startTime > TIME_LIMIT_MS)) break; 
         
-        // 【修改】: 儲存 *所有* 最佳移動
         let currentBestMovesForThisDepth = []; 
         let currentBestScoreForThisDepth = -Infinity;
         
         const linesCopy = deepCopy(aiLines);
         const squaresCopy = deepCopy(aiSquares);
         const scoresCopy = deepCopy(aiScores);
-        // (我們在第一層深度後，可以根據上一層的 'overallBestMove' 來做排序優化，但目前保持簡單)
+        
         const sortedMoves = sortMovesForMinimax(availableMoves, linesCopy, squaresCopy);
+        
+        let movesToSearch = [];
+        const scoring = sortedMoves.filter(m => getMoveType(m, linesCopy, squaresCopy) === 'scoring');
+        const safe = sortedMoves.filter(m => getMoveType(m, linesCopy, squaresCopy) === 'safe');
+        
+        if (scoring.length > 0) movesToSearch = scoring;
+        else if (safe.length > 0) movesToSearch = safe;
+        else movesToSearch = sortedMoves; 
 
-        // 2. 根節點移動迴圈
-        for (const move of sortedMoves) {
-            
+        for (const move of movesToSearch) { 
             if (performance.now() - startTime > TIME_LIMIT_MS) {
-                break;
+                if (currentBestMovesForThisDepth.length > 0) break;
             }
 
-            const undoData = makeMove(move, playerAINumber, linesCopy, squaresCopy, scoresCopy);
+            const undoData = makeMove(move.segments, playerAINumber, linesCopy, squaresCopy, scoresCopy);
             
             let score;
             if (undoData.scoredCount > 0 && scoreAndGoRule) {
-                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime);
+                score = minimax(currentDepth, -Infinity, Infinity, true, true, linesCopy, squaresCopy, scoresCopy, startTime); 
             } else {
                 score = -minimax(currentDepth - 1, -Infinity, Infinity, false, false, linesCopy, squaresCopy, scoresCopy, startTime);
             }
             
-            undoMove(move, undoData, linesCopy, squaresCopy, scoresCopy);
+            undoMove(undoData, linesCopy, squaresCopy, scoresCopy); 
             
-            // 【修改】: 儲存所有平手的最佳移動
             if (score > currentBestScoreForThisDepth) {
                 currentBestScoreForThisDepth = score;
-                currentBestMovesForThisDepth = [move]; // 找到 *更* 好的，重設
+                currentBestMovesForThisDepth = [move]; 
             } else if (score === currentBestScoreForThisDepth) {
-                currentBestMovesForThisDepth.push(move); // 找到 *一樣* 好的，加入
+                currentBestMovesForThisDepth.push(move); 
             }
-        } // 結束根節點移動
+        } 
 
-        if (performance.now() - startTime > TIME_LIMIT_MS) {
-            // 這一層沒跑完，不儲存結果，使用上一層的 `overallBestMove`
-            break;
-        }
-
-        // 【修改】: 如果這一層完整跑完了
         if (currentBestMovesForThisDepth.length > 0) {
-            // 從所有最佳解中 *隨機* 挑一個，作為這一層的答案
             overallBestMove = currentBestMovesForThisDepth[Math.floor(Math.random() * currentBestMovesForThisDepth.length)];
         } else {
-             break; // 沒找到移動
+             break; 
         }
-
-    } // 結束迭代加深
+    } 
 
     if (!overallBestMove) {
         return findBestMoveHeuristic(availableMoves);
     }
 
-    return { dotA: overallBestMove.p1, dotB: overallBestMove.p2 };
+    return { dotA: overallBestMove.dotA, dotB: overallBestMove.dotB }; 
 }
 
-
 /**
- * Minimax 核心函式 (NegaMax 變體)
- * (此函式不變)
+ * Minimax 核心
  */
 function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squaresState, scoresState, startTime) {
     
-    if (depth > 0 && (performance.now() - startTime > TIME_LIMIT_MS)) {
+    if ((ttHits % 500 === 0) && (performance.now() - startTime > TIME_LIMIT_MS)) {
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
 
-    // 1. 置換表
     const boardHash = getBoardHash(linesState);
     if (transpositionTable.has(boardHash)) {
         const cached = transpositionTable.get(boardHash);
@@ -276,21 +230,25 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
         }
     }
 
-    // 2. 終止
-    // 【修改】
-    const availableMoves = getAvailableMoves(linesState); // 這裡因為 depth > 0 且 maxLineLength=1, 會自動取得 1-length segments
+    const availableMoves = getAvailableMoves(linesState); 
     if (depth === 0 || availableMoves.length === 0) {
         return evaluateState(linesState, squaresState, scoresState, isMaxPlayer);
     }
 
-    // 3. 遞迴
-    let bestValue = -Infinity; 
-    const sortedMoves = (depth > 4) ? sortMovesForMinimax(availableMoves, linesState, squaresState) : availableMoves;
+    const sortedMoves = sortMovesForMinimax(availableMoves, linesState, squaresState);
+    let movesToSearch = [];
+    const scoring = sortedMoves.filter(m => getMoveType(m, linesState, squaresState) === 'scoring');
+    const safe = sortedMoves.filter(m => getMoveType(m, linesState, squaresState) === 'safe');
+    
+    if (isMaxPlayer && scoring.length > 0) movesToSearch = scoring;
+    else if (safe.length > 0) movesToSearch = safe;
+    else movesToSearch = sortedMoves;
 
-    for (const move of sortedMoves) {
+    let bestValue = -Infinity; 
+
+    for (const move of movesToSearch) { 
         const currentPlayerToMove = isMaxPlayer ? playerAINumber : playerOpponentNumber;
-        
-        const undoData = makeMove(move, currentPlayerToMove, linesState, squaresState, scoresState);
+        const undoData = makeMove(move.segments, currentPlayerToMove, linesState, squaresState, scoresState);
         
         let value;
         if (undoData.scoredCount > 0 && scoreAndGoRule) {
@@ -299,129 +257,176 @@ function minimax(depth, alpha, beta, isMaxPlayer, isChainMove, linesState, squar
             value = -minimax(depth - 1, -beta, -alpha, !isMaxPlayer, false, linesState, squaresState, scoresState, startTime);
         }
 
-        undoMove(move, undoData, linesState, squaresState, scoresState);
+        undoMove(undoData, linesState, squaresState, scoresState); 
         
         bestValue = Math.max(bestValue, value);
         alpha = Math.max(alpha, bestValue);
 
-        if (alpha >= beta) {
-            break; // Beta 剪枝
-        }
+        if (alpha >= beta) break; 
     }
     
-    // 4. 存入置換表
     transpositionTable.set(boardHash, { score: bestValue, depth: depth });
-
     return bestValue;
 }
 
-/**
- * 啟發式評估函式 (Heuristic Evaluation)
- * (此函式不變)
- */
+// --- 評估與輔助 ---
+
+function getMoveType(move, linesState, squaresState) {
+    let uniqueAdjacentSquares = new Set();
+    for (const seg of move.segments) {
+        const adjacentSquares = getAdjacentSquares(seg.id, squaresState);
+        adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
+    }
+
+    let maxSides = 0;
+    for (const sq of uniqueAdjacentSquares) {
+        if (sq.filled) continue;
+        let sidesAfterMove = 0;
+        sq.lineKeys.forEach(key => {
+            if (linesState[key].players.length > 0) sidesAfterMove++;
+            else if (move.segments.some(seg => seg.id === key)) sidesAfterMove++;
+        });
+        if (sidesAfterMove > maxSides) maxSides = sidesAfterMove;
+    }
+
+    if (maxSides === 4) return 'scoring';
+    if (maxSides === 3) return 'bad'; 
+    return 'safe';
+}
+
+
 function evaluateState(linesState, squaresState, scoresState, isMaxPlayer) {
     const myScore = isMaxPlayer ? scoresState[playerAINumber] : scoresState[playerOpponentNumber];
     const oppScore = isMaxPlayer ? scoresState[playerOpponentNumber] : scoresState[playerAINumber];
     let heuristicScore = (myScore - oppScore) * HEURISTIC_SQUARE_VALUE;
-    if (myScore + oppScore === aiSquares.length) {
+    
+    if (myScore + oppScore === squaresState.length) {
          return heuristicScore + (myScore > oppScore ? HEURISTIC_WIN_SCORE : -HEURISTIC_WIN_SCORE);
     }
-    let safeMoves = 0;
-    let minorUnsafeMoves = 0;
-    let criticalUnsafeMoves = []; 
+    
     for (const sq of squaresState) {
         if (sq.filled) continue;
         const sides = getSidesDrawn(sq, linesState);
+        
         if (sides === 3) {
-            heuristicScore -= HEURISTIC_CRITICAL_MOVE_PENALTY;
-            const criticalLineId = sq.lineKeys.find(key => linesState[key].players.length === 0);
-            if (criticalLineId) criticalUnsafeMoves.push(criticalLineId);
+            if (isMaxPlayer) {
+                heuristicScore += HEURISTIC_CRITICAL_MOVE_PENALTY; 
+            } else {
+                heuristicScore -= 2000; 
+            }
         } else if (sides === 2) {
             heuristicScore -= HEURISTIC_MINOR_MOVE_PENALTY;
-            minorUnsafeMoves++;
-        } else {
-            safeMoves++;
         }
     }
-    if (safeMoves === 0 && minorUnsafeMoves === 0 && criticalUnsafeMoves.length > 0) {
-        let minChain = Infinity;
-        const uniqueCriticalLines = [...new Set(criticalUnsafeMoves)];
-        for (const lineId of uniqueCriticalLines) {
-            const chainLength = calculateChainReaction(linesState[lineId], linesState, squaresState);
-            if (chainLength < minChain) {
-                minChain = chainLength;
-            }
-        }
-        if (minChain < Infinity) {
-             heuristicScore -= minChain * HEURISTIC_SQUARE_VALUE;
-        }
-    }
+    
     return heuristicScore;
 }
 
-
-// --- Minimax 輔助函式 (排序) ---
-// (此函式不變)
 function sortMovesForMinimax(moves, linesState, squaresState) {
-    return moves.map(move => {
+    return moves.map(move => { 
         let priority = 0;
-        const adjacentSquares = getAdjacentSquares(move.id, squaresState);
-        for (const sq of adjacentSquares) {
-            if (sq.filled) continue;
-            const sides = getSidesDrawn(sq, linesState);
-            if (sides === 3) priority = 100;
-            else if (sides === 2) priority = -100;
-            else if (sides === 1) priority = -10;
-            else priority = 10;
+        let uniqueAdjacentSquares = new Set();
+        
+        for (const seg of move.segments) {
+            const adjacentSquares = getAdjacentSquares(seg.id, squaresState);
+            adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
         }
+
+        let createsThreeSided = false;
+        let createsTwoSided = false;
+        let isScoring = false;
+
+        for (const sq of uniqueAdjacentSquares) {
+            if (sq.filled) continue;
+            
+            let sidesAfterMove = 0;
+            sq.lineKeys.forEach(key => {
+                if (linesState[key].players.length > 0) sidesAfterMove++;
+                else if (move.segments.some(seg => seg.id === key)) sidesAfterMove++;
+            });
+            
+            if (sidesAfterMove === 4) {
+                isScoring = true;
+            } else if (sidesAfterMove === 3) {
+                createsThreeSided = true;
+            } else if (sidesAfterMove === 2) {
+                createsTwoSided = true;
+            }
+        }
+        
+        if (isScoring) {
+            priority += 100000; 
+            if (createsThreeSided) priority += 5000; 
+            if (createsTwoSided) priority -= 2000;
+        } 
+        else if (createsThreeSided) {
+            priority -= 10000; 
+        } 
+        else if (createsTwoSided) {
+            priority -= 100; 
+        } 
+        else {
+            priority += 10; 
+        }
+
+        if (move.segments.every(seg => seg.players.length === 0)) {
+             priority += 5;
+        }
+
         return { move, priority };
     }).sort((a, b) => b.priority - a.priority)
       .map(item => item.move);
 }
 
 
-// --- 遊戲狀態模擬函式 (Worker 內部) ---
+// --- 基礎輔助函式 ---
 
-/**
- * 【已修改】
- * 根據 maxLineLength 產生可行的移動
- * - 如果 maxLineLength === 1, 傳回 1-length segments (Minimax 策略用)
- * - 如果 maxLineLength > 1, 傳回 {dotA, dotB} 物件 (Heuristic 策略用)
- */
-function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, lineLength = maxLineLength) {
+// 修改：支援搜尋 1 到 maxLen 之間的所有可能移動，並考慮 lineRule
+function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, cols = gridCols, maxLen = maxLineLength) {
     const moves = [];
     
-    if (lineLength === 1) {
-        // Minimax 策略: 傳回 1-length segments (舊有邏輯)
+    // 1. 搜尋長度為 1 的連線
+    // 注意：如果 lineRule 是 'exact' 且 maxLen > 1，則不能加入長度為 1 的線段
+    if (lineRule === 'range' || (lineRule === 'exact' && maxLen === 1)) {
         for (const id in linesObj) {
             if (linesObj[id].players.length === 0) {
-                moves.push(linesObj[id]);
+                const seg = linesObj[id];
+                moves.push({ dotA: seg.p1, dotB: seg.p2, segments: [seg] });
             }
         }
-        
-    } else {
-        // Heuristic 策略: D {dotA, dotB, segments}
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                const dotA = dots[r][c];
+    }
 
-                // 1. 檢查水平 (往右)
-                if (c + lineLength < cols) {
-                    const dotB = dots[r][c + lineLength];
-                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
-                    // 檢查是否至少有一條線是新的
-                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
-                        moves.push({ dotA, dotB, segments });
+    // 2. 搜尋長度 > 1 的連線
+    if (maxLen > 1) {
+        // 決定搜尋迴圈的起始與結束
+        // 如果是 range: 2 到 maxLen
+        // 如果是 exact: 只搜尋 maxLen
+        let startL = (lineRule === 'exact') ? maxLen : 2;
+        let endL = maxLen;
+
+        for (let l = startL; l <= endL; l++) {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const dotA = dots[r][c];
+                    
+                    // 橫向檢查 (Horizontal)
+                    if (c + l < cols) {
+                        const dotB = dots[r][c + l];
+                        // 檢查中間是否有被佔用的線段 (規則：必須至少覆蓋一個未佔用的線段)
+                        const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                        // 只要路徑有效，且至少包含一個未被佔領的線段，就是合法移動
+                        if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                            moves.push({ dotA, dotB, segments });
+                        }
                     }
-                }
-                
-                // 2. 檢查垂直 (往下)
-                if (r + lineLength < rows) {
-                    const dotB = dots[r + lineLength][c];
-                    const segments = getSegmentsForLine(dotA, dotB, linesObj);
-                    // 檢查是否至少有一條線是新的
-                    if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
-                        moves.push({ dotA, dotB, segments });
+                    
+                    // 縱向檢查 (Vertical)
+                    if (r + l < rows) {
+                        const dotB = dots[r + l][c];
+                        const segments = getSegmentsForLine(dotA, dotB, linesObj);
+                        if (segments.length > 0 && segments.some(seg => seg.players.length === 0)) {
+                            moves.push({ dotA, dotB, segments });
+                        }
                     }
                 }
             }
@@ -433,9 +438,7 @@ function getAvailableMoves(linesObj = aiLines, dots = aiDots, rows = gridRows, c
 function getSidesDrawn(square, linesObj = aiLines) {
     let sides = 0;
     for (const key of square.lineKeys) {
-        if (linesObj[key] && linesObj[key].players.length > 0) {
-            sides++;
-        }
+        if (linesObj[key] && linesObj[key].players.length > 0) sides++;
     }
     return sides;
 }
@@ -446,27 +449,30 @@ function getAdjacentSquares(lineId, squaresArr = aiSquares) {
 
 function getBoardHash(linesObj) {
     let hash = '';
-    const sortedKeys = Object.keys(linesObj).sort();
-    for (const id of sortedKeys) {
-        hash += linesObj[id].players.length;
+    for (const id of sortedLineKeys) {
+        const pLen = linesObj[id].players.length;
+        hash += pLen > 0 ? '1' : '0'; 
     }
     return hash;
 }
 
-/**
- * 【已修正】模擬下棋
- */
-function makeMove(segment, player, linesState, squaresState, scoresState) {
+function makeMove(moveSegments, player, linesState, squaresState, scoresState) {
     const undoData = {
         player: player, 
         scoredCount: 0,
-        filledSquares: []
+        filledSquares: [], 
+        segmentsChanged: []  
     };
-    if (!linesState[segment.id].players.includes(player)) {
-        linesState[segment.id].players.push(player);
+    let uniqueAdjacentSquares = new Set();
+    for (const segment of moveSegments) {
+        if (!linesState[segment.id].players.includes(player)) {
+            linesState[segment.id].players.push(player);
+            undoData.segmentsChanged.push(segment.id); 
+        }
+        const adjacentSquares = getAdjacentSquares(segment.id, squaresState);
+        adjacentSquares.forEach(sq => uniqueAdjacentSquares.add(sq));
     }
-    const adjacentSquares = getAdjacentSquares(segment.id, squaresState);
-    for (const sq of adjacentSquares) {
+    for (const sq of uniqueAdjacentSquares) {
         if (!sq.filled) {
             const sides = getSidesDrawn(sq, linesState);
             if (sides === 4) {
@@ -474,123 +480,51 @@ function makeMove(segment, player, linesState, squaresState, scoresState) {
                 sq.player = player;
                 scoresState[player]++;
                 undoData.scoredCount++;
-                undoData.filledSquares.push(sq);
+                undoData.filledSquares.push(sq); 
             }
         }
     }
     return undoData;
 }
 
-/**
- * 【已修正】模擬撤銷下棋
- */
-function undoMove(segment, undoData, linesState, squaresState, scoresState) {
+function undoMove(undoData, linesState, squaresState, scoresState) {
     const player = undoData.player;
-    const pIndex = linesState[segment.id].players.indexOf(player);
-    if (pIndex > -1) {
-        linesState[segment.id].players.splice(pIndex, 1);
+    for (const segmentId of undoData.segmentsChanged) {
+        const pIndex = linesState[segmentId].players.indexOf(player);
+        if (pIndex > -1) linesState[segmentId].players.splice(pIndex, 1);
     }
-    
     if (undoData.scoredCount > 0) {
         for (const sq of undoData.filledSquares) {
-            const player = sq.player;
-            scoresState[player]--;
-            sq.filled = false;
-            sq.player = null;
+            const stateSquare = squaresState.find(s => s.lineKeys[0] === sq.lineKeys[0] && s.lineKeys[1] === sq.lineKeys[1]);
+            if (stateSquare) {
+                scoresState[player]--;
+                stateSquare.filled = false;
+                stateSquare.player = null;
+            }
         }
     }
 }
 
-/**
- * 【新增】
- * (複製自 script.js)
- * 取得 dotA 和 dotB 之間的所有 1-length 線段
- */
 function getSegmentsForLine(dotA, dotB, linesObj = aiLines) {
     const segments = [];
     const dr = Math.sign(dotB.r - dotA.r);
     const dc = Math.sign(dotB.c - dotA.c);
     let r = dotA.r;
     let c = dotA.c;
-    
-    if (dr !== 0 && dc !== 0) {
-        return [];
-    }
-
+    if (dr !== 0 && dc !== 0) return [];
     while (r !== dotB.r || c !== dotB.c) {
         let next_r = r + dr;
         let next_c = c + dc;
         let segmentId = null;
-
-        if (dr === 0) { // 水平
-            segmentId = `H_${r},${Math.min(c, next_c)}`;
-        } else if (dc === 0) { // 垂直
-            segmentId = `V_${Math.min(r, next_r)},${c}`;
-        }
-
-        if (segmentId && linesObj[segmentId]) {
-            segments.push(linesObj[segmentId]);
-        }
+        if (dr === 0) segmentId = `H_${r},${Math.min(c, next_c)}`;
+        else if (dc === 0) segmentId = `V_${Math.min(r, next_r)},${c}`;
+        if (segmentId && linesObj[segmentId]) segments.push(linesObj[segmentId]);
         r = next_r;
         c = next_c;
     }
     return segments;
 }
 
-
-// 深度複製
 function deepCopy(obj) {
     return JSON.parse(JSON.stringify(obj));
-}
-
-// (來自 script.js) 的連鎖計算函式
-function calculateChainReaction(aiSacrificeSegment, linesState, squaresState) {
-    // (此函式不變)
-    let totalChainLength = 0;
-    const simulatedDrawnLines = new Set();
-    simulatedDrawnLines.add(aiSacrificeSegment.id);
-    const startingBoxes = [];
-    for (const sq of squaresState) {
-        if (sq.filled || !sq.lineKeys.includes(aiSacrificeSegment.id)) {
-            continue;
-        }
-        let sidesDrawn = 0;
-        sq.lineKeys.forEach(key => {
-            if (linesState[key].players.length > 0) sidesDrawn++;
-        });
-        if (sidesDrawn === 2) {
-            startingBoxes.push(sq);
-        }
-    }
-    const boxQueue = [...startingBoxes];
-    const processedBoxes = new Set(startingBoxes.map(sq => sq.lineKeys.join(',')));
-    while (boxQueue.length > 0) {
-        const currentBox = boxQueue.shift();
-        totalChainLength++;
-        currentBox.lineKeys.forEach(key => simulatedDrawnLines.add(key));
-        for (const lineKey of currentBox.lineKeys) {
-            for (const adjacentSq of squaresState) {
-                const adjacentBoxId = adjacentSq.lineKeys.join(',');
-                if (adjacentSq === currentBox || adjacentSq.filled || processedBoxes.has(adjacentBoxId)) {
-                    continue;
-                }
-                if (adjacentSq.lineKeys.includes(lineKey)) {
-                    let adjacentSidesDrawn = 0;
-                    let fourthSide = null;
-                    for (const adjKey of adjacentSq.lineKeys) {
-                        if (linesState[adjKey].players.length > 0 || simulatedDrawnLines.has(adjKey)) {
-                            adjacentSidesDrawn++;
-                        } else {
-                            fourthSide = adjKey;
-                        }
-                    }
-                    if (adjacentSidesDrawn === 3 && fourthSide !== null) {
-                        boxQueue.push(adjacentSq);
-                        processedBoxes.add(adjacentBoxId);
-                    }
-                }
-            }
-        }
-    }
-    return totalChainLength;
 }
