@@ -197,7 +197,36 @@
                         </div>
                     </div>
                 </div>
-            </div>
+
+                <div class="control-section" style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                    <h3 class="section-title"><span class="icon">🎯</span> 多重連鎖搜尋器</h3>
+                    
+                    <div class="settings-grid">
+                        <div class="batch-input-group">
+                            <label for="chain-threshold">連鎖門檻 (格)</label>
+                            <input id="chain-threshold" type="number" min="1" max="50" value="6" />
+                        </div>
+                        <div class="batch-input-group">
+                            <label for="search-count">搜尋數量 (局)</label>
+                            <input id="search-count" type="number" min="1" max="10" value="3" />
+                        </div>
+                    </div>
+
+                    <button id="find-chain-button" class="btn success shadow-effect" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #8b5cf6, #d946ef); color: white;">
+                        <span class="btn-icon">⚡</span> 開始自動搜尋
+                    </button>
+                    
+                    <p id="chain-status" class="hidden" style="color: var(--color-text-muted); font-size: 0.8rem; margin-top: 8px; font-weight: 600; text-align: center;">
+                        準備就緒
+                    </p>
+
+                    <div id="chain-results-area" class="hidden" style="margin-top:15px; border-top:1px dashed #cbd5e1; padding-top:10px;">
+                        <h4 style="font-size:0.85rem; color:var(--color-text-muted); margin:0 0 8px 0;">搜尋結果 (點擊載入):</h4>
+                        <div id="chain-results-list" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto;">
+                            </div>
+                    </div>
+                </div>
+                </div>
         </div> 
 
     </div> 
